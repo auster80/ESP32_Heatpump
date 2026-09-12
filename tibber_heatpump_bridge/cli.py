@@ -8,16 +8,20 @@ import signal
 import sys
 import time
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from . import __version__
 from .backends import DryRunBackend, build_backend
 from .backends.base import Backend, BackendError
 from .config import AppConfig, ConfigError, load_config
 from .controller import Controller
+from .curve import CurvePlan, merge_slots, plan_curve, shift_runs
+from .learning import LearningError, fit_house_model, fit_power_model, read_observations_csv
 from .outdoor import make_fetcher
 from .schedule import MODE_ORDER, runs, summarize
-from .tibber import TibberClient, TibberError
+from .sensors import emulate, fake_temperature, resolution_k
+from .tibber import PriceSlot, TibberClient, TibberError
 
 log = logging.getLogger("tibber_heatpump_bridge")
 
@@ -168,11 +172,169 @@ def cmd_run(cfg: AppConfig, args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+# --- curve shifting (virtual outdoor sensor) ----------------------------------
+
+
+def render_curve_plan(
+    cfg: AppConfig,
+    plan: CurvePlan,
+    *,
+    tz: ZoneInfo,
+    now: datetime,
+    indoor_c: float,
+    outdoor_c: float,
+    currency: str = "",
+    every_slot: bool = False,
+) -> str:
+    curve = cfg.curve
+    settings = curve.settings
+    lines = [
+        f"indoor {indoor_c:.1f} C (band {settings.band_low:.1f}-{settings.band_high:.1f}, "
+        f"target {settings.end_target_c:.1f})  outdoor {outdoor_c:.1f} C  "
+        f"model a={curve.house.a:.3f} b={curve.house.b:.3f} c={curve.house.c:.3f} "
+        f"filter {curve.house.filter_minutes:.0f} min",
+        "",
+    ]
+    if every_slot:
+        for step in plan.steps:
+            marker = "*" if step.slot.contains(now) else " "
+            lines.append(
+                f"{marker} {step.slot.start.astimezone(tz):%a %H:%M}  shift {step.shift:+5.1f}"
+                f"  eff {step.shift_effective:+5.1f}  indoor {step.indoor_c:5.2f}"
+                f"  {step.slot.total:7.4f}  {step.power_kw:5.2f} kW"
+            )
+    else:
+        for run in shift_runs(plan, indoor_start_c=indoor_c):
+            marker = "*" if run.start <= now < run.end else " "
+            lines.append(
+                f"{marker} {run.start.astimezone(tz):%a %H:%M} - {run.end.astimezone(tz):%a %H:%M}"
+                f"  shift {run.shift:+5.1f} K  indoor {run.indoor_start_c:.1f} -> {run.indoor_end_c:.1f}"
+                f"  avg {run.avg_price:.4f} {currency}  {run.energy_kwh:5.1f} kWh  {run.cost:6.2f}"
+            )
+    saving = 0.0 if plan.baseline_cost == 0 else (1 - plan.cost / plan.baseline_cost) * 100
+    low, high = plan.indoor_range
+    lines += [
+        "",
+        f"planned: {plan.energy_kwh:.1f} kWh, {plan.cost:.2f} {currency}"
+        f"   without shifting: {plan.baseline_energy_kwh:.1f} kWh, {plan.baseline_cost:.2f} {currency}"
+        f"   saving {saving:.0f}%",
+        f"predicted indoor {low:.1f} - {high:.1f} C, worst band violation {plan.max_violation_k:.2f} K",
+    ]
+    current = next((s for s in plan.steps if s.slot.contains(now)), plan.steps[0])
+    present = fake_temperature(outdoor_c, current.shift)
+    line = (
+        f"now: shift {current.shift:+.1f} K -> present {present:.1f} C to the heat pump"
+        f" (real {outdoor_c:.1f} C)"
+    )
+    if curve.sensor is not None:
+        emu = emulate(curve.sensor.sensor, curve.sensor.pot, present)
+        step_k = resolution_k(curve.sensor.sensor, curve.sensor.pot, present)
+        line += (
+            f"; {curve.sensor.kind}: {emu.target_ohms:.0f} ohm -> tap {emu.tap}"
+            f" ({emu.achieved_ohms:.0f} ohm = {emu.achieved_c:.2f} C, step {step_k:.2f} K)"
+        )
+    lines.append(line)
+    return "\n".join(lines)
+
+
+def _planning_slots(slots: list[PriceSlot], cfg: AppConfig, now: datetime) -> list[PriceSlot]:
+    merged = merge_slots(slots, cfg.curve.planning_slot_minutes)
+    upcoming = [s for s in merged if s.end > now]
+    horizon_end = now + timedelta(hours=cfg.curve.horizon_hours)
+    return [s for s in upcoming if s.start < horizon_end]
+
+
+def cmd_curve_plan(cfg: AppConfig, args: argparse.Namespace) -> int:
+    now = datetime.now(UTC)
+    client = TibberClient(cfg.tibber.token)
+    prices = client.fetch_prices(home_id=cfg.tibber.home_id, resolution=cfg.tibber.resolution)
+    tz = ZoneInfo(cfg.schedule.timezone or prices.time_zone)
+    outdoor_c = args.outdoor
+    if outdoor_c is None:
+        fetcher = make_fetcher(cfg.outdoor)
+        outdoor_c = fetcher() if fetcher else None
+    if outdoor_c is None:
+        print("curve-plan needs --outdoor or an [outdoor_temperature] source", file=sys.stderr)
+        return EXIT_CONFIG
+    slots = _planning_slots(prices.slots, cfg, now)
+    if not slots:
+        print("no upcoming price slots to plan", file=sys.stderr)
+        return EXIT_TIBBER
+    plan = plan_curve(
+        slots,
+        cfg.curve.house,
+        cfg.curve.power,
+        cfg.curve.settings,
+        indoor_c=args.indoor,
+        outdoor_c=outdoor_c,
+        shift_effective=args.shift_now,
+    )
+    print(
+        f"home {prices.home_id}  tz {tz.key}  {len(slots)} planning slots of"
+        f" {cfg.curve.planning_slot_minutes} min, horizon {cfg.curve.horizon_hours} h"
+    )
+    print(
+        render_curve_plan(
+            cfg,
+            plan,
+            tz=tz,
+            now=now,
+            indoor_c=args.indoor,
+            outdoor_c=outdoor_c,
+            currency=prices.currency,
+            every_slot=args.slots,
+        )
+    )
+    return EXIT_OK
+
+
+def cmd_curve_fit(cfg: AppConfig, args: argparse.Namespace) -> int:
+    filter_minutes = cfg.curve.house.filter_minutes if args.filter_minutes is None else args.filter_minutes
+    try:
+        observations = read_observations_csv(args.log)
+        house = fit_house_model(
+            observations, filter_minutes=filter_minutes, include_outdoor=not args.no_outdoor
+        )
+    except LearningError as exc:
+        print(f"fit error: {exc}", file=sys.stderr)
+        return EXIT_CONFIG
+    model = house.model
+    print(f"# {house.report.samples} samples, rmse {house.report.rmse:.3f} K/h")
+    print(f"# equilibrium {model.equilibrium_c:.2f} C, time constant {model.time_constant_h:.1f} h")
+    for warning in house.report.warnings:
+        print(f"# WARNING: {warning}")
+    print("[curve.model]")
+    print(f"a = {model.a:.5f}")
+    print(f"b = {model.b:.5f}")
+    print(f"c = {model.c:.5f}")
+    print(f"d = {model.d:.5f}")
+    print(f"filter_minutes = {filter_minutes:.0f}")
+    if any(o.power_kw is not None for o in observations):
+        try:
+            power = fit_power_model(
+                observations, heat_limit_c=cfg.curve.power.heat_limit_c, filter_minutes=filter_minutes
+            )
+        except LearningError as exc:
+            print(f"# power model not fitted: {exc}")
+            return EXIT_OK
+        print(f"\n# power: {power.report.samples} samples, rmse {power.report.rmse:.3f} kW")
+        for warning in power.report.warnings:
+            print(f"# WARNING: {warning}")
+        print("[curve.power]")
+        print(f"kw_per_k_outdoor = {power.model.kw_per_k_outdoor:.5f}")
+        print(f"kw_per_k_shift = {power.model.kw_per_k_shift:.5f}")
+        print(f"heat_limit_c = {power.model.heat_limit_c:.1f}")
+        print(f"standby_kw = {power.model.standby_kw:.4f}")
+    return EXIT_OK
+
+
 COMMANDS: dict[str, Callable[[AppConfig, argparse.Namespace], int]] = {
     "plan": cmd_plan,
     "once": cmd_once,
     "run": cmd_run,
     "check": cmd_check,
+    "curve-plan": cmd_curve_plan,
+    "curve-fit": cmd_curve_fit,
 }
 
 
@@ -197,6 +359,21 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--dry-run", action="store_true", help="log instead of writing to the backend")
 
     sub.add_parser("check", help="validate config, backend connectivity and the Tibber token")
+
+    curve_plan = sub.add_parser(
+        "curve-plan", help="plan heating-curve shifts (virtual outdoor temperature) for the price horizon"
+    )
+    curve_plan.add_argument("--indoor", type=float, required=True, help="current indoor temperature (C)")
+    curve_plan.add_argument("--outdoor", type=float, help="current outdoor temperature (C); default: source")
+    curve_plan.add_argument("--shift-now", type=float, default=0.0, help="shift currently in effect (K)")
+    curve_plan.add_argument("--slots", action="store_true", help="print every planning slot")
+
+    curve_fit = sub.add_parser("curve-fit", help="fit the house (and power) model from a CSV log")
+    curve_fit.add_argument("log", help="CSV with time,indoor_c,outdoor_c,shift[,power_kw]")
+    curve_fit.add_argument(
+        "--filter-minutes", type=float, help="heat pump outdoor smoothing; default from config"
+    )
+    curve_fit.add_argument("--no-outdoor", action="store_true", help="drop the residual outdoor term d")
     return parser
 
 

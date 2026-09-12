@@ -214,6 +214,34 @@ Publishes the mode name (or a per-mode payload) to one topic with `retain`,
 for setups where Home Assistant, Node-RED or an ESPHome board does the last
 hop.
 
+## Heating-curve shifting (virtual outdoor sensor)
+
+Ngenic Tune makes any heat pump price-aware by feeding it a manipulated
+outdoor temperature; the pump's own heating curve then heats more or less.
+`docs/virtual-outdoor-sensor.md` designs the same thing for this project:
+the hardware that replaces the sensor signal (a digital potentiometer or a
+relay ladder behind a fail-safe bypass relay, with an ESPHome sketch in
+`firmware/`), and the control logic that is already implemented here:
+
+- `curve.py` — a small house model (`dT/dt = c − a·T + b·shift + d·T_out`)
+  and a dynamic-programming planner that picks a shift per price slot so the
+  room stays inside a comfort band while heating moves into cheap slots.
+- `learning.py` — fits the model from a CSV log (`curve-fit`), with a
+  recursive least-squares variant for learning while running.
+- `sensors.py` — NTC and PT1000 resistance maths and digital potentiometer
+  tap calculation.
+
+```bash
+tibber-heatpump-bridge curve-plan --indoor 21.3 --outdoor 2.0     # plan against live prices
+tibber-heatpump-bridge curve-fit heating-log.csv                 # learn the house model
+```
+
+`curve-plan` prints the planned shift runs with the predicted indoor
+temperature, the cost against not shifting, and the outdoor temperature (and
+potentiometer tap) to present right now. The runtime loop that applies the
+plan through the emulator is the next step and is described in the design
+document.
+
 ## Running as a service
 
 `deploy/tibber-heatpump-bridge.service` is a systemd unit with setup notes.

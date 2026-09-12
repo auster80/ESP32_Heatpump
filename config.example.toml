@@ -123,3 +123,42 @@ qos = 1
 # [backend.mqtt.payloads]
 # block = "1"
 # normal = "2"
+
+# --- Heating-curve shifting via a virtual outdoor temperature ----------------
+# Used by `curve-plan` and `curve-fit` (see docs/virtual-outdoor-sensor.md).
+# A positive shift makes the heat pump believe it is colder (more heat).
+[curve]
+band_low = 20.0            # comfort band the planner must stay inside
+band_high = 22.0
+# end_target = 21.0        # preferred temperature; default: middle of the band
+actions = [-6, -3, 0, 2, 4]   # allowed shifts in K
+comfort_penalty = 0.5      # cost per K^2 and hour away from the target; 0 = pure cost minimisation
+switch_penalty = 0.05      # cost per K of shift change; raise it for calmer, longer runs
+planning_slot_minutes = 30 # planning resolution (prices are averaged into these slots)
+horizon_hours = 36
+
+# House response, rates per hour: dT/dt = c - a*T + b*shift + d*T_out.
+# Start with these, log for a week, then paste the output of `curve-fit`.
+[curve.model]
+a = 0.05            # 1/h, time constant 20 h
+b = 0.03            # K/h per K of shift
+c = 1.05            # K/h, equilibrium c/a = 21 C
+d = 0.0             # 1/h, residual outdoor influence (0 for a well tuned curve)
+filter_minutes = 60 # how long the heat pump smooths its outdoor reading
+
+# Electrical power model used for the cost: P = standby + g*max(0, limit - T_out) + p*shift.
+[curve.power]
+kw_per_k_outdoor = 0.06
+kw_per_k_shift = 0.08
+heat_limit_c = 16.0
+standby_kw = 0.0
+
+# Outdoor sensor and digital potentiometer of the emulator, for tap numbers.
+[curve.sensor]
+type = "ntc"            # "ntc" (r25, beta) or "pt1000" (r0)
+r25 = 10000
+beta = 3977
+digipot_ohms = 100000   # full scale of the digital potentiometer
+digipot_taps = 1024
+wiper_ohms = 35
+series_ohms = 0         # fixed resistor in series with the potentiometer

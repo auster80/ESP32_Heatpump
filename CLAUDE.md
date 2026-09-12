@@ -39,7 +39,15 @@ Architecture (data flows left to right):
 - `backends/` — `Backend.apply(mode)` implementations: `dryrun`, `http`, `sgready` (two relay channels, HTTP or GPIO), `modbus`, `mqtt`. `build_backend(type, options)` constructs one from the `[backend]` config table and validates the options.
 - `config.py` — TOML loading into dataclasses with `ConfigError` messages that name the offending key.
 - `controller.py` — refresh/decide/apply loop with fail-safe: no plan, stale plan or uncovered time means `normal`. Backend errors propagate so the mode is retried on the next tick.
-- `cli.py` — `plan`, `once`, `run`, `check` subcommands; exit codes 0/2/3/4 (ok/config/tibber/backend).
+- `cli.py` — `plan`, `once`, `run`, `check`, `curve-plan`, `curve-fit` subcommands; exit codes 0/2/3/4 (ok/config/tibber/backend).
+
+Curve shifting (virtual outdoor sensor, see `docs/virtual-outdoor-sensor.md`):
+
+- `curve.py` — `HouseModel` (`dT/dt = c − a·T + b·shift_eff + d·T_out`, first-order lag `filter_minutes` on the shift), `PowerModel`, `CurveSettings`, and `plan_curve()`: a dynamic programme over (indoor temperature, effective shift) minimising price cost + comfort penalty + band-violation penalty, with a terminal term valuing stored heat at the mean price. `merge_slots()` coarsens price slots for speed.
+- `learning.py` — batch least squares and `RecursiveLeastSquares`; `fit_house_model()` / `fit_power_model()` from `Observation` rows; CSV read/write (`time,indoor_c,outdoor_c,shift[,power_kw]`, row k's shift applies until row k+1).
+- `sensors.py` — `NtcSensor` (beta model), `Pt1000Sensor` (Callendar-Van Dusen), `DigitalPotentiometer` tap maths, `fake_temperature(real, shift) = real − shift`.
+- `firmware/esphome-outdoor-sensor-emulator.yaml` — untested ESPHome sketch for the emulator hardware.
+- Sign convention everywhere: positive shift = pretend it is colder = more heat.
 
 Conventions:
 

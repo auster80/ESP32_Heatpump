@@ -1,0 +1,200 @@
+# ESPHome sketch for the virtual outdoor sensor emulator (docs/virtual-outdoor-sensor.md,
+# option A: ESP32 + ADS1115 + AD5272-100 digital potentiometer + fail-safe DPDT relay).
+#
+# STATUS: written against the AD5272 datasheet and the ESPHome documentation, NOT yet
+# run on hardware. Verify the I2C frames and the relay logic before wiring the heat pump.
+#
+# Wiring summary
+#   real outdoor sensor  -> divider: 3.3 V - 10k 0.1 % - (A0) - sensor - GND   (ADS1115 A0)
+#   AD5272 (isolated 5 V rail, ISO1540 I2C isolator), ADDR to GND -> address 0x2F
+#   DPDT relay: NC contacts = real sensor to heat pump, NO contacts = AD5272 terminals A/W
+#   relay coil driven via transistor from GPIO26; hardware watchdog fed by GPIO27 pulses
+#
+# MQTT topics (under heatpump/outdoor/):
+#   real_c     (published)  measured outdoor temperature
+#   target_c   (subscribed) temperature to present to the heat pump
+#   heartbeat  (subscribed) controller alive; missing for 20 min -> bypass
+#   state      (published)  "bypass" or "emulating <tap>"
+
+substitutions:
+  ntc_r25: "10000"
+  ntc_beta: "3977"
+  pot_full_scale: "100000"   # ohms
+  pot_taps: "1024"
+  pot_wiper: "35"            # ohms
+  digipot_address: "0x2F"
+  min_present_c: "-30"
+  max_present_c: "35"
+  heartbeat_timeout_s: "1200"
+
+esphome:
+  name: outdoor-sensor-emulator
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          // Allow RDAC updates: control register (command 7) bit 1.
+          uint8_t enable[2] = {0x1C, 0x02};
+          id(bus_a).write(${digipot_address}, enable, 2);
+      - switch.turn_off: emulation_relay
+
+esp32:
+  board: esp32dev
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+logger:
+api:
+ota:
+  platform: esphome
+
+mqtt:
+  broker: !secret mqtt_broker
+  username: !secret mqtt_user
+  password: !secret mqtt_password
+  topic_prefix: heatpump/outdoor
+  birth_message:
+    topic: heatpump/outdoor/state
+    payload: bypass
+  will_message:
+    topic: heatpump/outdoor/state
+    payload: bypass
+  on_message:
+    - topic: heatpump/outdoor/target_c
+      then:
+        - lambda: |-
+            float target = atof(x.c_str());
+            if (target < ${min_present_c} || target > ${max_present_c}) {
+              ESP_LOGW("emu", "target %.1f C out of bounds, bypassing", target);
+              id(target_valid) = false;
+              return;
+            }
+            id(target_c) = target;
+            id(target_valid) = true;
+            id(last_heartbeat) = millis();
+        - script.execute: apply_target
+    - topic: heatpump/outdoor/heartbeat
+      then:
+        - lambda: id(last_heartbeat) = millis();
+
+i2c:
+  - id: bus_a
+    sda: GPIO21
+    scl: GPIO22
+    scan: true
+
+globals:
+  - id: target_c
+    type: float
+    initial_value: "0"
+  - id: target_valid
+    type: bool
+    initial_value: "false"
+  - id: last_heartbeat
+    type: uint32_t
+    initial_value: "0"
+  - id: current_tap
+    type: int
+    initial_value: "-1"
+
+ads1115:
+  - address: 0x48
+
+sensor:
+  - platform: ads1115
+    multiplexer: A0_GND
+    gain: 4.096
+    id: divider_voltage
+    update_interval: 30s
+    filters:
+      - median:
+          window_size: 5
+          send_every: 5
+  - platform: resistance
+    sensor: divider_voltage
+    configuration: DOWNSTREAM
+    resistor: 10kOhm
+    reference_voltage: 3.3V
+    id: sensor_ohms
+  - platform: ntc
+    sensor: sensor_ohms
+    calibration:
+      b_constant: ${ntc_beta}
+      reference_temperature: 25°C
+      reference_resistance: ${ntc_r25}Ohm
+    name: "Outdoor real"
+    id: outdoor_real
+    state_topic: heatpump/outdoor/real_c
+    accuracy_decimals: 2
+
+switch:
+  - platform: gpio
+    pin: GPIO26
+    id: emulation_relay
+    name: "Emulation active"
+    restore_mode: ALWAYS_OFF     # boot in bypass: heat pump sees its real sensor
+
+output:
+  - platform: gpio
+    pin: GPIO27
+    id: watchdog_pin
+
+script:
+  - id: apply_target
+    then:
+      - lambda: |-
+          if (!id(target_valid)) {
+            id(emulation_relay).turn_off();
+            return;
+          }
+          // Resistance of the NTC at the target temperature (beta model).
+          const float t_k = id(target_c) + 273.15f;
+          const float ohms = ${ntc_r25} * expf(${ntc_beta} * (1.0f / t_k - 1.0f / 298.15f));
+          const float step = ${pot_full_scale} / (${pot_taps} - 1.0f);
+          int tap = (int) lroundf((ohms - ${pot_wiper}) / step);
+          if (tap < 0) tap = 0;
+          if (tap > ${pot_taps} - 1) tap = ${pot_taps} - 1;
+          if (tap != id(current_tap)) {
+            // AD5272 command 1 (write RDAC): [0000 01 D9 D8] [D7 .. D0]
+            uint8_t frame[2] = {(uint8_t) (0x04 | ((tap >> 8) & 0x03)), (uint8_t) (tap & 0xFF)};
+            auto err = id(bus_a).write(${digipot_address}, frame, 2);
+            if (err != esphome::i2c::ERROR_OK) {
+              ESP_LOGE("emu", "AD5272 write failed (%d), bypassing", (int) err);
+              id(emulation_relay).turn_off();
+              return;
+            }
+            id(current_tap) = tap;
+            ESP_LOGI("emu", "present %.2f C = %.0f ohm -> tap %d", id(target_c), ohms, tap);
+          }
+          id(emulation_relay).turn_on();
+
+interval:
+  # Feed the external hardware watchdog only while we are healthy and connected.
+  - interval: 30s
+    then:
+      - lambda: |-
+          const bool alive = id(target_valid) &&
+                             (millis() - id(last_heartbeat)) < ${heartbeat_timeout_s} * 1000UL;
+          if (!alive) {
+            if (id(emulation_relay).state) {
+              ESP_LOGW("emu", "no heartbeat, bypassing to the real sensor");
+            }
+            id(emulation_relay).turn_off();
+            id(target_valid) = false;
+            return;
+          }
+          id(watchdog_pin).turn_on();
+          delay(5);
+          id(watchdog_pin).turn_off();
+  - interval: 60s
+    then:
+      - lambda: |-
+          char state[32];
+          if (id(emulation_relay).state) {
+            snprintf(state, sizeof(state), "emulating %d", id(current_tap));
+          } else {
+            snprintf(state, sizeof(state), "bypass");
+          }
+          id(mqtt_client).publish("heatpump/outdoor/state", state);

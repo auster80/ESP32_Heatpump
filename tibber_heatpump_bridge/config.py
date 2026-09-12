@@ -10,7 +10,9 @@ from pathlib import Path
 from typing import Any
 
 from .backends import BACKEND_TYPES
+from .curve import CurveSettings, HouseModel, PowerModel
 from .schedule import DEFAULT_LEVEL_MODES, Mode, ScheduleConfig, TimeWindow
+from .sensors import SENSOR_TYPES, DigitalPotentiometer, Sensor, make_sensor
 from .tibber import RESOLUTIONS
 
 TOKEN_ENV = "TIBBER_TOKEN"
@@ -52,12 +54,30 @@ class BackendConfig:
 
 
 @dataclass
+class SensorConfig:
+    kind: str
+    sensor: Sensor
+    pot: DigitalPotentiometer
+
+
+@dataclass
+class CurveConfig:
+    settings: CurveSettings = field(default_factory=CurveSettings)
+    house: HouseModel = field(default_factory=HouseModel)
+    power: PowerModel = field(default_factory=PowerModel)
+    sensor: SensorConfig | None = None
+    planning_slot_minutes: int = 30
+    horizon_hours: int = 36
+
+
+@dataclass
 class AppConfig:
     tibber: TibberConfig
     schedule: ScheduleConfig = field(default_factory=ScheduleConfig)
     run: RunConfig = field(default_factory=RunConfig)
     backend: BackendConfig = field(default_factory=BackendConfig)
     outdoor: OutdoorConfig | None = None
+    curve: CurveConfig = field(default_factory=CurveConfig)
 
 
 def load_config(path: str | os.PathLike[str], *, env: Mapping[str, str] | None = None) -> AppConfig:
@@ -80,7 +100,8 @@ def parse_config(document: Mapping[str, Any], *, env: Mapping[str, str] | None =
     backend = _parse_backend(_table(document, "backend"))
     outdoor_raw = document.get("outdoor_temperature")
     outdoor = _parse_outdoor(outdoor_raw) if outdoor_raw else None
-    return AppConfig(tibber=tibber, schedule=schedule, run=run, backend=backend, outdoor=outdoor)
+    curve = _parse_curve(_table(document, "curve"))
+    return AppConfig(tibber=tibber, schedule=schedule, run=run, backend=backend, outdoor=outdoor, curve=curve)
 
 
 # --- helpers ----------------------------------------------------------------
@@ -219,3 +240,96 @@ def _parse_outdoor(raw: Any) -> OutdoorConfig:
         headers={str(k): str(v) for k, v in headers.items()},
         timeout_seconds=float(_number(raw, "timeout_seconds", 10.0, section="outdoor_temperature") or 10.0),
     )
+
+
+def _float(table: Mapping[str, Any], key: str, default: float, *, section: str) -> float:
+    value = _number(table, key, default, section=section)
+    return default if value is None else float(value)
+
+
+def _parse_curve(table: Mapping[str, Any]) -> CurveConfig:
+    section = "curve"
+    defaults = CurveSettings()
+    raw_actions = table.get("actions", list(defaults.actions))
+    if not isinstance(raw_actions, list) or not raw_actions:
+        raise ConfigError("[curve].actions must be a non-empty list of shifts in K")
+    try:
+        actions = tuple(float(a) for a in raw_actions)
+    except (TypeError, ValueError):
+        raise ConfigError("[curve].actions must contain numbers") from None
+    settings = CurveSettings(
+        band_low=_float(table, "band_low", defaults.band_low, section=section),
+        band_high=_float(table, "band_high", defaults.band_high, section=section),
+        end_target=_number(table, "end_target", None, section=section),
+        actions=actions,
+        temp_step=_float(table, "temp_step", defaults.temp_step, section=section),
+        shift_step=_float(table, "shift_step", defaults.shift_step, section=section),
+        margin=_float(table, "margin", defaults.margin, section=section),
+        violation_penalty=_float(table, "violation_penalty", defaults.violation_penalty, section=section),
+        comfort_penalty=_float(table, "comfort_penalty", defaults.comfort_penalty, section=section),
+        switch_penalty=_float(table, "switch_penalty", defaults.switch_penalty, section=section),
+    )
+    model_table = table.get("model") or {}
+    power_table = table.get("power") or {}
+    sensor_table = table.get("sensor") or {}
+    for name, value in (("model", model_table), ("power", power_table), ("sensor", sensor_table)):
+        if not isinstance(value, dict):
+            raise ConfigError(f"[curve.{name}] must be a table")
+    house_defaults = HouseModel()
+    house = HouseModel(
+        a=_float(model_table, "a", house_defaults.a, section="curve.model"),
+        b=_float(model_table, "b", house_defaults.b, section="curve.model"),
+        c=_float(model_table, "c", house_defaults.c, section="curve.model"),
+        d=_float(model_table, "d", house_defaults.d, section="curve.model"),
+        filter_minutes=_float(
+            model_table, "filter_minutes", house_defaults.filter_minutes, section="curve.model"
+        ),
+    )
+    power_defaults = PowerModel()
+    power = PowerModel(
+        kw_per_k_outdoor=_float(
+            power_table, "kw_per_k_outdoor", power_defaults.kw_per_k_outdoor, section="curve.power"
+        ),
+        kw_per_k_shift=_float(
+            power_table, "kw_per_k_shift", power_defaults.kw_per_k_shift, section="curve.power"
+        ),
+        heat_limit_c=_float(power_table, "heat_limit_c", power_defaults.heat_limit_c, section="curve.power"),
+        standby_kw=_float(power_table, "standby_kw", power_defaults.standby_kw, section="curve.power"),
+    )
+    sensor: SensorConfig | None = None
+    if sensor_table:
+        kind = str(sensor_table.get("type", "ntc")).lower()
+        if kind not in SENSOR_TYPES:
+            raise ConfigError(f"[curve.sensor].type must be one of {SENSOR_TYPES}")
+        params: dict[str, float] = {}
+        if kind == "ntc":
+            params["r25"] = _float(sensor_table, "r25", 10000.0, section="curve.sensor")
+            params["beta"] = _float(sensor_table, "beta", 3977.0, section="curve.sensor")
+        else:
+            params["r0"] = _float(sensor_table, "r0", 1000.0, section="curve.sensor")
+        pot = DigitalPotentiometer(
+            full_scale_ohms=_float(sensor_table, "digipot_ohms", 100_000.0, section="curve.sensor"),
+            taps=_integer(sensor_table, "digipot_taps", 1024, section="curve.sensor"),
+            wiper_ohms=_float(sensor_table, "wiper_ohms", 0.0, section="curve.sensor"),
+            series_ohms=_float(sensor_table, "series_ohms", 0.0, section="curve.sensor"),
+        )
+        if pot.taps < 2 or pot.full_scale_ohms <= 0:
+            raise ConfigError("[curve.sensor] digipot_taps must be >= 2 and digipot_ohms positive")
+        sensor = SensorConfig(kind=kind, sensor=make_sensor(kind, **params), pot=pot)
+    cfg = CurveConfig(
+        settings=settings,
+        house=house,
+        power=power,
+        sensor=sensor,
+        planning_slot_minutes=_integer(table, "planning_slot_minutes", 30, section=section),
+        horizon_hours=_integer(table, "horizon_hours", 36, section=section),
+    )
+    if cfg.planning_slot_minutes < 5 or cfg.horizon_hours < 1:
+        raise ConfigError("[curve].planning_slot_minutes must be >= 5 and horizon_hours >= 1")
+    try:
+        settings.validate()
+        house.validate()
+        power.validate()
+    except ValueError as exc:
+        raise ConfigError(f"[curve]: {exc}") from exc
+    return cfg
