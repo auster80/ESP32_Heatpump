@@ -1,0 +1,125 @@
+# tibber-heatpump-bridge configuration. Copy to config.toml and edit.
+# config.toml is git-ignored because it holds your Tibber token.
+
+[tibber]
+# Personal access token from https://developer.tibber.com/settings/access-token
+# Leave empty to read it from the TIBBER_TOKEN environment variable instead.
+token = ""
+# Optional: pick a home when the account has several (see `check` output).
+home_id = ""
+# QUARTER_HOURLY (default, 96 slots/day) or HOURLY.
+resolution = "QUARTER_HOURLY"
+
+[schedule]
+# "percentile": rank each day's slots by price (settings below).
+# "tibber_level": use Tibber's own VERY_CHEAP..VERY_EXPENSIVE levels.
+strategy = "percentile"
+
+# Shares of each day's slots, cheapest first / most expensive first.
+# force + boost + reduce + block must not exceed 1.0.
+force_share = 0.0     # cheapest slots -> force (SG Ready 4)
+boost_share = 0.25    # next cheapest -> boost (SG Ready 3)
+reduce_share = 0.25   # next most expensive -> reduce
+block_share = 0.10    # most expensive -> block (SG Ready 1)
+
+# Always force when the total price is at or below this (0.0 = free/negative).
+force_below_price = 0.0
+# Only block when the price is above this absolute level (optional).
+# block_only_above_price = 0.30
+
+# Comfort limits. Blocking is capped per run and per day and is followed by a
+# recovery gap; SG Ready itself allows at most 2 h of blocking at a time.
+max_block_minutes = 120
+min_gap_after_block_minutes = 60
+max_block_minutes_per_day = 360
+# Never block or reduce inside these local-time windows (showers, evenings).
+comfort_windows = ["06:00-08:00", "17:00-21:00"]
+# Never block below this outdoor temperature (needs [outdoor_temperature]).
+# never_block_below_outdoor_c = -5
+# Defaults to the home's time zone from Tibber.
+# timezone = "Europe/Vienna"
+
+# Only used with strategy = "tibber_level".
+[schedule.level_modes]
+VERY_CHEAP = "force"
+CHEAP = "boost"
+NORMAL = "normal"
+EXPENSIVE = "reduce"
+VERY_EXPENSIVE = "block"
+
+# Optional outdoor temperature source: any JSON endpoint plus a dotted path.
+# Example: Home Assistant entity state.
+# [outdoor_temperature]
+# url = "http://homeassistant.local:8123/api/states/sensor.outdoor_temperature"
+# json_path = "state"
+# [outdoor_temperature.headers]
+# Authorization = "Bearer <long-lived access token>"
+
+[run]
+interval_seconds = 60     # control loop poll interval
+reapply_minutes = 15      # re-send the current mode even if unchanged
+refresh_minutes = 30      # re-fetch prices this often
+retry_minutes = 10        # retry interval after a failed fetch / while tomorrow is missing
+stale_plan_hours = 6      # fall back to normal if prices could not be refreshed for this long
+release_on_exit = true    # set normal when the service stops
+
+[backend]
+# dryrun | sgready | http | modbus | mqtt
+type = "dryrun"
+
+# --- SG Ready: two relay contacts A and B ----------------------------------
+[backend.sgready]
+timeout_seconds = 10
+# mode -> SG Ready state: 1 blocked, 2 normal, 3 recommended on, 4 forced on
+modes = { block = 1, reduce = 2, normal = 2, boost = 3, force = 4 }
+
+[backend.sgready.a]
+type = "http"   # or "gpio" with pin = 17, active_high = true
+on = "http://192.168.1.60/rpc/Switch.Set?id=0&on=true"
+off = "http://192.168.1.60/rpc/Switch.Set?id=0&on=false"
+
+[backend.sgready.b]
+type = "http"
+on = "http://192.168.1.60/rpc/Switch.Set?id=1&on=true"
+off = "http://192.168.1.60/rpc/Switch.Set?id=1&on=false"
+
+# --- Generic HTTP: one or more requests per mode ---------------------------
+[backend.http]
+timeout_seconds = 10
+[backend.http.actions]
+block  = [{ url = "http://192.168.1.60/rpc/Switch.Set?id=0&on=true" }]
+reduce = [{ url = "http://192.168.1.60/rpc/Switch.Set?id=0&on=false" }]
+normal = [{ url = "http://192.168.1.60/rpc/Switch.Set?id=0&on=false" }]
+boost  = [{ url = "http://192.168.1.60/rpc/Switch.Set?id=0&on=false" }]
+force  = [{ url = "http://192.168.1.60/rpc/Switch.Set?id=0&on=false" }]
+# POST with body and headers:
+# boost = [{ url = "http://homeassistant.local:8123/api/webhook/heatpump-boost", method = "POST", body = "{}", headers = { "Content-Type" = "application/json" } }]
+
+# --- Modbus TCP: register / coil writes per mode ---------------------------
+# Addresses and values are examples only; use the register map from your heat
+# pump's Modbus manual. Negative values are written as 16-bit two's complement.
+[backend.modbus]
+host = "192.168.1.50"
+port = 502
+unit = 1
+timeout_seconds = 5
+[backend.modbus.writes]
+block  = [{ address = 100, value = 1, kind = "coil" }]
+reduce = [{ address = 100, value = 0, kind = "coil" }, { address = 30, value = -2 }]
+normal = [{ address = 100, value = 0, kind = "coil" }, { address = 30, value = 0 }]
+boost  = [{ address = 100, value = 0, kind = "coil" }, { address = 30, value = 2 }]
+force  = [{ address = 100, value = 0, kind = "coil" }, { address = 30, value = 3 }]
+
+# --- MQTT: publish the mode to a topic --------------------------------------
+[backend.mqtt]
+host = "192.168.1.10"
+port = 1883
+topic = "heatpump/mode"
+retain = true
+qos = 1
+# username = "bridge"
+# password = "secret"
+# Optional payload per mode (default: the mode name).
+# [backend.mqtt.payloads]
+# block = "1"
+# normal = "2"

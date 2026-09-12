@@ -1,0 +1,30 @@
+# systemd unit for tibber-heatpump-bridge.
+#
+#   sudo useradd --system --home /opt/tibber-heatpump-bridge heatpump
+#   sudo mkdir -p /etc/tibber-heatpump-bridge
+#   sudo cp config.example.toml /etc/tibber-heatpump-bridge/config.toml   # then edit
+#   echo 'TIBBER_TOKEN=...' | sudo tee /etc/tibber-heatpump-bridge/env
+#   sudo chmod 600 /etc/tibber-heatpump-bridge/env
+#   sudo cp deploy/tibber-heatpump-bridge.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now tibber-heatpump-bridge
+#
+# For GPIO-driven SG Ready contacts add the user to the gpio group.
+
+[Unit]
+Description=Tibber heat pump bridge (price-driven SG Ready / Modbus / MQTT control)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=heatpump
+EnvironmentFile=/etc/tibber-heatpump-bridge/env
+ExecStart=/opt/tibber-heatpump-bridge/.venv/bin/tibber-heatpump-bridge -c /etc/tibber-heatpump-bridge/config.toml run
+# On stop the bridge sets the heat pump back to normal before exiting.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
