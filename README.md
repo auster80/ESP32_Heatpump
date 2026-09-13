@@ -256,7 +256,7 @@ python -m pytest        # unit tests, no network
 ruff check . && ruff format --check .
 ```
 
-Set `TIBBER_API_URL` to point the client at a local mock server.
+Set `TIBBER_API_URL` to point the client at a local mock server; `tools/fake_tibber.py` is one (token `smoke-token`).
 
 ## Limitations
 

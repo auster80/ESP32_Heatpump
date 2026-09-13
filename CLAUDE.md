@@ -30,6 +30,7 @@ pip install -e '.[dev]'
 python -m pytest                       # unit tests, no network access needed
 ruff check . && ruff format --check .  # lint and formatting (line length 110)
 python -m tibber_heatpump_bridge -c config.toml plan   # CLI without installing the script
+python tools/fake_tibber.py &   # local fake Tibber API for smoke tests (TIBBER_API_URL=http://127.0.0.1:8765/gql, token smoke-token)
 ```
 
 Architecture (data flows left to right):
