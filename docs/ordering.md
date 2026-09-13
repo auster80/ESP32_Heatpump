@@ -71,3 +71,89 @@ so the real AFS 2 returns to the pump. A latching relay there would hold the
 emulator in circuit through a power cut, which is exactly the failure the
 design exists to prevent. `K2` is the opposite case — latching is preferred,
 because it draws no standing current and keeps its setting through a reset.
+
+---
+
+# Breadboard variant
+
+Everything above can be swapped for through-hole parts, and one substitution
+unlocks the rest.
+
+## The unlock: go SPI
+
+The AD5272 is I²C, and **I²C needs bidirectional isolation** — the data line is
+driven from both ends. Bidirectional isolators (ISO1540, ADuM1250) are SMD
+only, so the I²C route forces at least one surface-mount part.
+
+Writing a tap to a digital potentiometer is **one-directional**: clock, data,
+chip-select, nothing coming back. An SPI part therefore needs only three
+unidirectional isolated channels, and those are available as ordinary **DIP-8
+optocouplers**. Choosing an SPI rheostat makes the whole build through-hole.
+
+## Substitutions
+
+| Instead of | Use | Why |
+|---|---|---|
+| AD5272BRMZ-100 (MSOP-10, I²C) | **MCP41100-I/P** — 100 kΩ, 256 taps, SPI, **PDIP-8** | Breadboards directly. Verified below |
+| ISO1540 (SOIC-8) | **3 × 6N137** (DIP-8 optocouplers) | Three write-only channels, not a bidirectional bus |
+| G6K-2P / G6KU-2P | **2 × Omron G5V-2-DC5** — DPDT, 0.3" DIP footprint, 5 V coil (~40 mA) | Drops straight into a breadboard. Use non-latching for both while prototyping; `K2` latching is an optimisation, not a requirement |
+| ESP32 DevKitC (25.4 mm wide) | **ESP32-PICO-KIT** (20.3 mm) | Leaves two free columns each side instead of one |
+
+The NE555, B0505S-1W, 2N7000, 1N4148, and all passives are already through-hole.
+
+## Does the DIP part actually work?
+
+Yes — and the higher wiper resistance barely registers, because the rheostat
+sits in the high-impedance parallel leg:
+
+| Part | Shift range at 0 °C | Safe taps | Worst step |
+|---|---|---|---|
+| AD5272, 1024 taps, 35 Ω wiper | −7.3 … +29.7 K | 60–1023 | 0.090 K |
+| MCP41100, 256 taps, 52 Ω wiper | −7.3 … +29.5 K | 15–255 | 0.359 K |
+| MCP41100, 256 taps, **125 Ω** worst-case wiper | −7.3 … +29.1 K | 15–255 | 0.356 K |
+
+0.36 K per tap against a heating curve is not a limitation.
+
+## The ±20 % tolerance turns out to help
+
+The MCP41100 is ±20 % end-to-end against the AD5272's ±1 %, and §3.6 warns that
+a loose full-scale bound lets the wrong sensor characteristic mimic the right
+one. The answer is to stop fitting it: **measure `A`–`W` once with a meter at a
+known tap**, pass the measured value as `full_scale_ohms`, and let the
+calibration fit only the bias.
+
+That leaves one free parameter instead of two, and identification gets *better*
+rather than worse. With a part 18 % high and the scale measured and fixed, five
+observations gave a **27.7× margin** at **0.022 K rms** — against 10.4× and
+0.048 K when both parameters were fitted.
+
+## Skip the isolation while you are on the bench
+
+The optocouplers and the B0505S only matter once the box is wired to the WPM.
+For bench work there is no second ground domain, so leave them out and add them
+for the install.
+
+A useful bench rig is small:
+
+- a **1 kΩ 0.1 % resistor** standing in for the AFS 2 (a 10-turn trimmer or a
+  decade box is better — it lets you sweep "weather")
+- a meter across the nodes that will become `X2 T(A)` and `X26`
+- compare what it reads against `ShuntEmulator.presented_ohms()` for the tap
+  you set
+
+That validates the maths, the SPI writes, the relay logic and the watchdog
+without the heat pump being involved at all. Only after that does anything get
+connected to `X2`.
+
+## Breadboard shopping list
+
+ESP32-PICO-KIT · MCP41100-I/P · 2 × Omron G5V-2-DC5 · NE555 (DIP-8) ·
+2 × 2N7000 · 2 × 1N4148 · 39.2 Ω and 90.9 Ω 0.1 % · 1 kΩ 0.1 % (sensor
+stand-in) · 1 kΩ + 2 × 10 kΩ · 1000 µF 16 V · 5 × 100 nF · 5 V 1 A supply ·
+breadboard and jumpers.
+
+Add for the install: 3 × 6N137 · B0505S-1W · enclosure and terminal blocks.
+
+One note on firmware: neither the AD5272 nor the MCP41100 has a ready-made
+ESPHome component, so the tap write is a small custom piece either way. SPI is
+the easier of the two to drive from a lambda.
