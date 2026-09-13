@@ -9,9 +9,12 @@ from tibber_heatpump_bridge.sensors import (
     Pt1000Sensor,
     ResistorLadder,
     ShuntEmulator,
+    ShuntObservation,
     coverage_c,
     emulate,
     fake_temperature,
+    fit_shunt,
+    identify_sensor,
     make_sensor,
     resolution_k,
 )
@@ -271,3 +274,88 @@ class ShuntEmulatorTests(unittest.TestCase):
         )
         tap = nominal.tap_for_shift(0.0, 4.0)
         self.assertLess(abs(skewed.shift_k(0.0, tap) - nominal.shift_k(0.0, tap)), 0.2)
+
+
+class SelfCalibrationTests(unittest.TestCase):
+    """The circuit identifies its own sensor and calibrates its own parts from
+    the pump's outdoor register -- no multimeter, no assumed tolerances."""
+
+    def _truth(self, sensor, bias=39.0, scale=100_000.0) -> ShuntEmulator:
+        return ShuntEmulator(
+            sensor=sensor,
+            pot=DigitalPotentiometer(full_scale_ohms=scale, taps=1024, wiper_ohms=35.0),
+            bias_ohms=bias,
+        )
+
+    def _observe(self, truth, weather, taps, quantise=0.1):
+        obs = []
+        for real_c, tap in zip(weather, taps, strict=True):
+            obs.append(
+                ShuntObservation(
+                    bypass_c=round(real_c, 1),
+                    tap=tap,
+                    emulated_c=round(round(truth.presented_c(real_c, tap) / quantise) * quantise, 3),
+                )
+            )
+        return obs
+
+    def test_identifies_pt1000(self):
+        truth = self._truth(Pt1000Sensor())
+        obs = self._observe(truth, [5.0, 5.0, -2.0, 11.0], [300, 500, 350, 420])
+        result = identify_sensor(obs)
+        self.assertEqual(result.kind, "pt1000")
+        self.assertTrue(result.confident, f"margin {result.margin_k}")
+
+    def test_identifies_kty(self):
+        truth = self._truth(KtySensor(), bias=130.0)
+        obs = self._observe(truth, [5.0, 5.0, -2.0, 11.0], [300, 500, 350, 420])
+        result = identify_sensor(obs)
+        self.assertEqual(result.kind, "kty")
+        self.assertTrue(result.confident, f"margin {result.margin_k}")
+
+    def test_fitting_needs_more_observations_than_free_parameters(self):
+        """Two fitted part values cost two degrees of freedom, so one or two
+        observations cannot separate the candidates -- refuse rather than
+        return a confident-looking guess."""
+        truth = self._truth(Pt1000Sensor())
+        for count in (1, 2):
+            obs = self._observe(truth, [5.0, 5.0][:count], [300, 500][:count])
+            with self.assertRaises(ValueError):
+                identify_sensor(obs)
+
+    def test_a_single_tap_change_separates_them_against_nominal_parts(self):
+        """Without fitting, one tap change is already decisive in the field:
+        the two characteristics predict readings kelvins apart, against a
+        register quantised to 0.1 C."""
+        pt = self._truth(Pt1000Sensor(), bias=39.0)
+        kty = self._truth(KtySensor(), bias=39.0)
+        tap = pt.pot.tap_for(20_000.0)
+        self.assertGreater(abs(pt.presented_c(5.0, tap) - kty.presented_c(5.0, tap)), 3.0)
+
+    def test_fit_recovers_part_values_the_datasheet_only_bounds(self):
+        """A +1 % rheostat and a bias resistor 4 % high must both come back."""
+        truth = self._truth(Pt1000Sensor(), bias=40.6, scale=101_000.0)
+        obs = self._observe(truth, [6.0, 1.0, -4.0, 9.0, 12.0], [280, 360, 480, 620, 800])
+        fitted, error = fit_shunt(obs, Pt1000Sensor())
+        self.assertLess(error, 0.15)
+        self.assertAlmostEqual(fitted.bias_ohms, 40.6, delta=4.0)
+        self.assertAlmostEqual(fitted.pot.full_scale_ohms, 101_000.0, delta=4_000.0)
+
+    def test_calibration_beats_trusting_the_datasheet(self):
+        """The whole point: a calibrated build predicts the pump better than a
+        nominal one, so the 1 % tolerance stops costing accuracy."""
+        truth = self._truth(Pt1000Sensor(), bias=40.6, scale=101_000.0)
+        obs = self._observe(truth, [6.0, 1.0, -4.0, 9.0, 12.0], [280, 360, 480, 620, 800])
+        nominal = self._truth(Pt1000Sensor())
+        fitted, _ = fit_shunt(obs, Pt1000Sensor())
+        check = self._observe(truth, [3.0, -8.0, 14.0], [330, 540, 700])
+        nominal_err = max(abs(nominal.presented_c(o.bypass_c, o.tap) - o.emulated_c) for o in check)
+        fitted_err = max(abs(fitted.presented_c(o.bypass_c, o.tap) - o.emulated_c) for o in check)
+        self.assertLess(fitted_err, nominal_err)
+        self.assertLess(fitted_err, 0.15)
+
+    def test_identification_needs_two_candidates(self):
+        truth = self._truth(Pt1000Sensor())
+        obs = self._observe(truth, [5.0], [300])
+        with self.assertRaises(ValueError):
+            identify_sensor(obs, candidates={"pt1000": Pt1000Sensor()})

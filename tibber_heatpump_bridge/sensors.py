@@ -9,7 +9,9 @@ pump: NTC thermistors (10 kOhm at 25 C is the usual value) and PT1000 RTDs.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 KELVIN = 273.15
 SENSOR_TYPES = ("ntc", "pt1000", "kty")
@@ -339,3 +341,159 @@ def fake_temperature(real_c: float, shift_k: float) -> float:
     raise its supply temperature.
     """
     return real_c - shift_k
+
+
+@dataclass(frozen=True)
+class ShuntObservation:
+    """One calibration point: what the pump reported before and after a tap.
+
+    Both readings come from the pump's own outdoor register, taken close
+    enough together that the weather has not moved. ``bypass_c`` is with K1
+    de-energised (the raw sensor), ``emulated_c`` with K1 energised at ``tap``.
+    """
+
+    bypass_c: float
+    tap: int
+    emulated_c: float
+
+
+@dataclass(frozen=True)
+class Identification:
+    kind: str
+    emulator: ShuntEmulator
+    rms_error_k: float
+    runner_up_kind: str
+    runner_up_error_k: float
+
+    @property
+    def margin_k(self) -> float:
+        return self.runner_up_error_k - self.rms_error_k
+
+    @property
+    def ratio(self) -> float:
+        """How many times worse the runner-up fitted.
+
+        A ratio, not a difference: residuals scale with how far the taps were
+        driven and how much the weather moved, so an absolute margin would be
+        strict on quiet data and lax on busy data.
+        """
+        if self.rms_error_k <= 0.0:
+            return float("inf")
+        return self.runner_up_error_k / self.rms_error_k
+
+    @property
+    def confident(self) -> bool:
+        """Decisive only if the winner fits several times better *and* fits well."""
+        return self.ratio >= 3.0 and self.rms_error_k < 1.0
+
+
+def _rms(emulator: ShuntEmulator, observations: Sequence[ShuntObservation]) -> float:
+    total = 0.0
+    for obs in observations:
+        try:
+            predicted = emulator.presented_c(obs.bypass_c, obs.tap)
+        except (ValueError, ZeroDivisionError):
+            return float("inf")
+        total += (predicted - obs.emulated_c) ** 2
+    return math.sqrt(total / len(observations))
+
+
+def fit_shunt(
+    observations: Sequence[ShuntObservation],
+    sensor: Sensor,
+    *,
+    taps: int = 1024,
+    wiper_ohms: float = 35.0,
+    bias_bounds: tuple[float, float] = (0.0, 400.0),
+    scale_bounds: tuple[float, float] = (95_000.0, 105_000.0),
+) -> tuple[ShuntEmulator, float]:
+    """Fit the series bias and the rheostat's true full scale to observations.
+
+    Both are what the datasheet only bounds: the AD5272 is a +-1 % part and the
+    bias resistor has its own tolerance. Fitting them against the pump's own
+    readings calibrates the build rather than trusting the numbers on the reel.
+
+    ``scale_bounds`` defaults to +-5 % of nominal, five times the datasheet
+    tolerance. Keep it tight: the shift a given tap produces scales as
+    ``R_sensor^2 / (R_pot * dR/dT)``, so a loose enough bound lets the *wrong*
+    characteristic mimic the right one by moving the full scale, and
+    :func:`identify_sensor` stops discriminating.
+    """
+    if not observations:
+        raise ValueError("need at least one observation to fit")
+    bias_floor, bias_ceil = bias_bounds
+    scale_floor, scale_ceil = scale_bounds
+    if bias_floor >= bias_ceil or scale_floor >= scale_ceil:
+        raise ValueError("bounds must be ordered and non-empty")
+    bias_lo, bias_hi = bias_floor, bias_ceil
+    scale_lo, scale_hi = scale_floor, scale_ceil
+    best_bias = (bias_lo + bias_hi) / 2
+    best_scale = (scale_lo + scale_hi) / 2
+    best_error = float("inf")
+    for _ in range(8):
+        bias_step = (bias_hi - bias_lo) / 12
+        scale_step = (scale_hi - scale_lo) / 12
+        for i in range(13):
+            bias = bias_lo + i * bias_step
+            for j in range(13):
+                scale = scale_lo + j * scale_step
+                candidate = ShuntEmulator(
+                    sensor=sensor,
+                    pot=DigitalPotentiometer(full_scale_ohms=scale, taps=taps, wiper_ohms=wiper_ohms),
+                    bias_ohms=bias,
+                )
+                error = _rms(candidate, observations)
+                if error < best_error:
+                    best_error, best_bias, best_scale = error, bias, scale
+        # Shrink around the best point, but never outside the caller's bounds:
+        # an unclamped window walks off when the optimum sits at an edge.
+        bias_lo = max(bias_floor, best_bias - bias_step)
+        bias_hi = min(bias_ceil, best_bias + bias_step)
+        scale_lo = max(scale_floor, best_scale - scale_step)
+        scale_hi = min(scale_ceil, best_scale + scale_step)
+    fitted = ShuntEmulator(
+        sensor=sensor,
+        pot=DigitalPotentiometer(full_scale_ohms=best_scale, taps=taps, wiper_ohms=wiper_ohms),
+        bias_ohms=best_bias,
+    )
+    return fitted, best_error
+
+
+def identify_sensor(
+    observations: Sequence[ShuntObservation],
+    *,
+    candidates: Mapping[str, Sensor] | None = None,
+    **fit_kwargs: Any,
+) -> Identification:
+    """Work out which sensor is fitted, from the pump's own outdoor readings.
+
+    The circuit is the same for every candidate; only the characteristic
+    differs, and the characteristics are far apart. Changing the tap moves the
+    reported temperature by an amount that depends on which sensor is in the
+    loop -- about 3.5 K apart for PT 1000 versus KTY against a register
+    quantised to 0.1 C -- so a handful of observations settles it without a
+    multimeter.
+    """
+    pool = dict(candidates) if candidates else {"pt1000": Pt1000Sensor(), "kty": KtySensor()}
+    if len(pool) < 2:
+        raise ValueError("need at least two candidates to identify between")
+    if len(observations) < 3:
+        raise ValueError(
+            "need at least 3 observations: fitting the bias and the full scale costs "
+            "two degrees of freedom, so fewer cannot separate the candidates. For a "
+            "quick field check against nominal part values, compare "
+            "ShuntEmulator.presented_c() for each candidate instead."
+        )
+    scored: list[tuple[float, str, ShuntEmulator]] = []
+    for kind, sensor in pool.items():
+        emulator, error = fit_shunt(observations, sensor, **fit_kwargs)
+        scored.append((error, kind, emulator))
+    scored.sort(key=lambda row: row[0])
+    best, runner_up = scored[0], scored[1]
+    return Identification(
+        kind=best[1],
+        emulator=best[2],
+        rms_error_k=best[0],
+        runner_up_kind=runner_up[1],
+        runner_up_error_k=runner_up[0],
+    )

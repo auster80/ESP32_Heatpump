@@ -139,9 +139,9 @@ with register 506 quantised to 0.1 °C.
 |---|---|---|
 | 1 | **ESP32** dev board (ESPHome) | control, Wi-Fi/MQTT |
 | 2 | **AD5272BRMZ-100** — 100 kΩ, 1024-tap I²C digital rheostat | the shunt. ±1 % end-to-end, ~35 Ω wiper, 5.5 V max across terminals |
-| 3 | **39 Ω 0.1 % 25 ppm** resistor | series bias, buys the "pretend it is milder" direction |
+| 3 | **39 Ω + 91 Ω, 0.1 % 25 ppm** | series bias. `K2` shorts the 91 Ω: 39 Ω for PT 1000, 130 Ω for KTY (§3.6) |
 | 4 | **ISO1540** I²C isolator + **B0505S-1W** isolated DC/DC | floats the rheostat section at the pump's X26 potential. Not optional |
-| 5 | **DPDT signal relay** (Omron G6K-2P) + driver transistor + flyback diode | K1, the bypass. NC = real sensor |
+| 5 | **DPDT signal relay** (Omron G6K-2P) ×2 + drivers + flyback diodes | `K1` the bypass (NC = real sensor); `K2` the bias select, latching preferred |
 | 6 | **TPL5010** (or NE555 monostable) | hardware watchdog holding K1 in only while the ESP32 heartbeats |
 | 7 | **5 V 1 A supply**, 1000 µF bulk cap, enclosure, terminal blocks | see §3.5 — the choice interacts with the isolation |
 
@@ -219,7 +219,72 @@ trips a plausibility check. Two defences, both required:
    holding a valid target for a settling period. A boot loop then parks
    permanently in bypass, which is the safe state, instead of oscillating.
 
-### 3.6 What it achieves
+### 3.6 One circuit for both sensors, calibrated by the pump
+
+The topology does not care which sensor is fitted. The shift a given tap
+produces scales as `R_sensor² / (R_pot · dR/dT)`, and for these two
+characteristics that ratio is **a constant 1.32 across the whole range**:
+
+| Rheostat | PT 1000 shift | KTY shift | ratio |
+|---|---|---|---|
+| 100 kΩ | +2.6 K | +2.0 K | 1.31 |
+| 50 kΩ | +5.2 K | +4.0 K | 1.32 |
+| 20 kΩ | +12.6 K | +9.6 K | 1.32 |
+| 10 kΩ | +24.1 K | +18.2 K | 1.32 |
+
+So the same AD5272-100 serves both. Only the series bias differs, because it
+has to buy the same *kelvin* of warm range out of a sensor with 3.7× the
+resistance slope: **38 Ω for PT 1000, 129 Ω for KTY**.
+
+**Make the bias switchable.** `R1` = 39 Ω 0.1 % permanently in circuit, `R2` =
+91 Ω 0.1 % in series with it, shorted by a second signal relay `K2`. K2 open
+gives 130 Ω (KTY), K2 shorting gives 39 Ω (PT 1000). Prefer a latching relay:
+no standing coil current, and the setting survives a reset. One relay and one
+resistor buy a board that does not need to know the sensor before it is built.
+
+#### The pump is the reference
+
+Once connected, the box can identify its own sensor and calibrate its own
+parts, because the pump reports what it sees. One observation is a pair of
+readings of input register 506 taken close enough together that the weather has
+not moved:
+
+1. K1 de-energised — the pump reads the raw sensor. That is the **true**
+   outdoor temperature, and it fixes `R_sensor` under each hypothesis.
+2. K1 energised at a known tap — the pump reads the shunted value.
+
+Each hypothesis predicts a different second reading, and they are far apart. At
+a true 5 °C with the rheostat at 20 kΩ, PT 1000 predicts **+1.36 °C** and KTY
+**−2.16 °C** — 3.5 K apart against a register quantised to 0.1 °C, a margin of
+about 35×. `identify_sensor()` does this; `fit_shunt()` does the least-squares
+fit behind it.
+
+#### It calibrates more than the sensor
+
+The same fit recovers the **series bias and the rheostat's true full scale** —
+exactly the two values the datasheet only bounds. §3.2 noted that the AD5272's
+±1 % tolerance costs about 0.13 K on a 4 K shift; fitting it against the pump's
+own readings removes that, and removes the bias resistor's tolerance with it.
+In a worked example with a KTY sensor, the bias 4 % high and the rheostat 1.2 %
+low, seven observations identified the sensor with a **10.4× margin**, fitted to
+**0.048 K rms**, and recovered the bias to within 1.8 Ω.
+
+Two honest limits:
+
+- **Three observations minimum.** Fitting two part values costs two degrees of
+  freedom, so one or two readings cannot separate the candidates;
+  `identify_sensor()` refuses rather than returning a confident-looking guess.
+  A single tap change *is* decisive as a field check, but only against assumed
+  nominal parts.
+- **Keep the full-scale bound tight** (±5 % of nominal is the default). Allow
+  ±20 % and the wrong characteristic can mimic the right one by moving the full
+  scale, and the discrimination collapses.
+
+Spread the observations over a few days of different weather and different
+taps. Confidence is reported as a ratio — how many times worse the runner-up
+fitted — because residuals scale with how hard the taps were driven.
+
+### 3.7 What it achieves
 
 Measured against the model, PT1000, 39 Ω bias, 100 kΩ rheostat:
 
@@ -236,7 +301,7 @@ rheostat approaches its wiper resistance and would short the sensor — a
 
 `max_shift` in the controller should still be set far tighter (2 K to start).
 
-### 3.7 Safety
+### 3.8 Safety
 
 - **K1 is the fail-safe**, not software. Power loss, firmware hang, or a stale
   controller drops the relay and the real AFS 2 returns.
@@ -543,9 +608,14 @@ The manual's characteristic table, now encoded as a test in
 `Pt1000Sensor` reproduces the PT 1000 column to within 1 Ω and the new
 `KtySensor` the KTY column to within 4 Ω, both asserted by tests.
 
-### 7.2 Step 1 — the one measurement that unblocks everything
+### 7.2 Step 1 — identify the sensor (now optional)
 
-Open question 2 reduces to a single reading, because the two candidate
+Since §3.6, the box identifies its own sensor once connected, so this
+measurement is no longer a gate on ordering parts — build with the switchable
+bias and let the calibration decide. It is still the fastest way to know before
+you power anything up, and the excitation check in step 5 is not optional.
+
+If you do measure, one reading settles it, because the two candidate
 characteristics are hundreds of ohms apart at any plausible outdoor
 temperature:
 
@@ -578,22 +648,20 @@ territory:
 
 Record the results in section 6, question 2.
 
-### 7.3 Step 2 — size the shunt for whichever sensor it is
+### 7.3 Step 2 — build once, for both
 
-The topology in section 3 does not change between PT 1000 and KTY; only the
-bias resistor and the useful tap range do, because the two characteristics sit
-at different resistances. `ShuntEmulator` takes the sensor as a parameter, so
-the firmware is identical either way.
+Fit the switchable bias from §3.6 (39 Ω always, 91 Ω shorted by `K2`) and the
+AD5272-100. That board works for either sensor, so nothing about the order
+depends on step 1.
 
-**If PT 1000** (the likely case): 39 Ω bias, AD5272-100. Reaches −7.3 … +29.7 K
-at 0 °C, tap accuracy better than 0.05 K, with the cold end clamped by the
-−30 °C safety floor rather than the hardware.
+After it is wired and before `curve run` is trusted with anything, take
+calibration observations: at least three, spread over a few days of different
+weather and different taps, each a bypass reading of register 506 followed by
+an emulated one. Feed them to `identify_sensor()`. It returns the sensor, the
+fitted bias and full scale, and a confidence ratio; set `K2` from the answer
+and store the fitted emulator as the model the controller plans against.
 
-**If KTY**: the sensor sits near 1630 Ω at 0 °C and changes ~14 Ω/K, roughly
-3.7× more resistance change per kelvin than PT 1000. The same 100 kΩ rheostat
-therefore produces a *smaller* shift for the same tap, and the bias resistor
-needs to be about 3.7× larger (150 Ω) for the same warm-side range. Confirm
-with `ShuntEmulator(sensor=KtySensor(), ...).shift_range_k()` once measured.
+Re-run it after any change to the board.
 
 ### 7.4 Step 3 — bench before house
 
