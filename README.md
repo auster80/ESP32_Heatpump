@@ -258,6 +258,23 @@ ruff check . && ruff format --check .
 
 Set `TIBBER_API_URL` to point the client at a local mock server; `tools/fake_tibber.py` is one (token `smoke-token`).
 
+## Status and where to continue
+
+Pull request: <https://github.com/auster80/Claude_Code_Default/pull/1>.
+Branch `claude/nibe-s-tibber-interface-a3dlzg`; `main` carries the same
+commits.
+
+- `docs/tibber-integrations.md` — which Tibber integrations could carry a
+  bridge (Homey, Futurehome, Ngenic) and which cannot (vendor clouds).
+- `docs/virtual-outdoor-sensor.md` — design of the Ngenic-style sensor
+  emulator and its control logic; ends with the open questions that decide
+  the next step (heat pump model and interface, sensor type and excitation
+  voltage, indoor temperature source, coldest outdoor temperature, power
+  reading).
+- Not built yet: the runtime loop that applies `curve-plan` through the
+  emulator (`curve run`), the emulator hardware itself, and any Homey or
+  Futurehome adapter.
+
 ## Limitations
 
 - The bridge only shifts demand in time. Tibber's own NIBE integration also
