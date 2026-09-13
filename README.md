@@ -287,9 +287,11 @@ Development happens on `main` in
 - `docs/virtual-outdoor-sensor.md` — design of the Ngenic-style sensor
   emulator and its control logic. Section 6 records the target installation (a
   Tecalor TTF 13 cool behind an ISG plus gateway, −19 °C design floor, The
-  Hague), why write endurance rules out continuously writing setpoint
-  registers, and why the emulator is still the better long-term design even
-  though this pump does have Modbus.
+  Hague) and why the emulator is the better design even though this pump does
+  have Modbus. **Section 7 is the hardware plan**: the AFS 2 sensor, its
+  terminals (X2 `T(A)` / X26), the manual's resistance table, the single
+  measurement that settles PT 1000 versus KTY, and a resistor ladder sized for
+  either answer.
 - Not built yet: the runtime loop that applies `curve-plan` to the heat pump
   (`curve run`), the emulator hardware, and any Homey or Futurehome adapter.
 - The part of this repo with no counterpart in the existing system is the

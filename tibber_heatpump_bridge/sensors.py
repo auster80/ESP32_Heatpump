@@ -12,7 +12,7 @@ import math
 from dataclasses import dataclass
 
 KELVIN = 273.15
-SENSOR_TYPES = ("ntc", "pt1000")
+SENSOR_TYPES = ("ntc", "pt1000", "kty")
 
 
 @dataclass(frozen=True)
@@ -61,7 +61,35 @@ class Pt1000Sensor:
         return t
 
 
-Sensor = NtcSensor | Pt1000Sensor
+@dataclass(frozen=True)
+class KtySensor:
+    """Silicon PTC of the KTY81-2xx family, the second characteristic printed
+    in the Tecalor TTF manual (2000 ohms at 25 C, 1630 at 0 C).
+
+    R(T) = r25 * (1 + alpha*(T-25) + beta*(T-25)^2), which reproduces the
+    manual's table to within about 3 ohms at the cold end.
+    """
+
+    r25: float = 2000.0
+    alpha: float = 7.874e-3
+    beta: float = 1.874e-5
+
+    def resistance(self, temp_c: float) -> float:
+        d = temp_c - 25.0
+        return self.r25 * (1.0 + self.alpha * d + self.beta * d * d)
+
+    def temperature(self, ohms: float) -> float:
+        if ohms <= 0:
+            raise ValueError("resistance must be positive")
+        # Positive root of beta*d^2 + alpha*d + (1 - ohms/r25) = 0.
+        c = 1.0 - ohms / self.r25
+        disc = self.alpha * self.alpha - 4.0 * self.beta * c
+        if disc < 0:
+            raise ValueError(f"resistance {ohms} is outside the KTY characteristic")
+        return 25.0 + (-self.alpha + math.sqrt(disc)) / (2.0 * self.beta)
+
+
+Sensor = NtcSensor | Pt1000Sensor | KtySensor
 
 
 def make_sensor(kind: str, **params: float) -> Sensor:
@@ -70,6 +98,8 @@ def make_sensor(kind: str, **params: float) -> Sensor:
         return NtcSensor(**params)
     if kind == "pt1000":
         return Pt1000Sensor(**params)
+    if kind == "kty":
+        return KtySensor(**params)
     raise ValueError(f"sensor type must be one of {SENSOR_TYPES}, got {kind!r}")
 
 
@@ -102,6 +132,64 @@ class DigitalPotentiometer:
 
 
 @dataclass(frozen=True)
+class ResistorLadder:
+    """Fixed base resistor plus binary-weighted resistors, each shorted by a
+    latching relay (option B in docs/virtual-outdoor-sensor.md).
+
+    PT1000 and KTY span too little resistance for a digital potentiometer to
+    resolve, and a relay ladder has no supply-voltage limit, is galvanically
+    isolated by construction, and draws no coil current between changes.
+
+    The tap is the binary code: bit *i* set means ``steps[i]`` is in circuit.
+    Exposes the same ``taps`` / ``resistance_at`` / ``tap_for`` surface as
+    :class:`DigitalPotentiometer`, so ``emulate``, ``resolution_k`` and
+    ``coverage_c`` work against either actuator.
+    """
+
+    base_ohms: float
+    steps: tuple[float, ...]
+
+    def __post_init__(self) -> None:
+        if not self.steps:
+            raise ValueError("a ladder needs at least one step resistor")
+        if any(step <= 0 for step in self.steps):
+            raise ValueError("ladder step resistors must be positive")
+
+    @property
+    def taps(self) -> int:
+        return 1 << len(self.steps)
+
+    @property
+    def span_ohms(self) -> float:
+        return sum(self.steps)
+
+    def resistance_at(self, tap: int) -> float:
+        tap = min(self.taps - 1, max(0, int(tap)))
+        extra = sum(step for i, step in enumerate(self.steps) if tap >> i & 1)
+        return self.base_ohms + extra
+
+    def tap_for(self, ohms: float) -> int:
+        """Closest code to ``ohms``; exact for a binary-weighted 1,2,4,... ladder."""
+        wanted = ohms - self.base_ohms
+        if wanted <= 0:
+            return 0
+        best, best_error = 0, abs(wanted)
+        for tap in range(self.taps):
+            error = abs(self.resistance_at(tap) - self.base_ohms - wanted)
+            if error < best_error:
+                best, best_error = tap, error
+        return best
+
+    def relays_for(self, tap: int) -> tuple[bool, ...]:
+        """Per-relay state for ``tap``: True means that resistor is in circuit."""
+        tap = min(self.taps - 1, max(0, int(tap)))
+        return tuple(bool(tap >> i & 1) for i in range(len(self.steps)))
+
+
+Actuator = DigitalPotentiometer | ResistorLadder
+
+
+@dataclass(frozen=True)
 class Emulation:
     target_c: float
     target_ohms: float
@@ -114,7 +202,7 @@ class Emulation:
         return self.achieved_c - self.target_c
 
 
-def emulate(sensor: Sensor, pot: DigitalPotentiometer, target_c: float) -> Emulation:
+def emulate(sensor: Sensor, pot: Actuator, target_c: float) -> Emulation:
     """Pick the tap that best reproduces ``target_c`` and report the achieved value."""
     target_ohms = sensor.resistance(target_c)
     tap = pot.tap_for(target_ohms)
@@ -122,7 +210,7 @@ def emulate(sensor: Sensor, pot: DigitalPotentiometer, target_c: float) -> Emula
     return Emulation(target_c, target_ohms, tap, achieved_ohms, sensor.temperature(achieved_ohms))
 
 
-def resolution_k(sensor: Sensor, pot: DigitalPotentiometer, temp_c: float) -> float:
+def resolution_k(sensor: Sensor, pot: Actuator, temp_c: float) -> float:
     """Temperature change caused by one tap step around ``temp_c``."""
     tap = pot.tap_for(sensor.resistance(temp_c))
     tap = min(pot.taps - 2, max(0, tap))
@@ -131,7 +219,7 @@ def resolution_k(sensor: Sensor, pot: DigitalPotentiometer, temp_c: float) -> fl
     return abs(high - low)
 
 
-def coverage_c(sensor: Sensor, pot: DigitalPotentiometer) -> tuple[float, float]:
+def coverage_c(sensor: Sensor, pot: Actuator) -> tuple[float, float]:
     """Coldest and warmest temperature the potentiometer can represent."""
     lowest_ohms = pot.resistance_at(0)
     highest_ohms = pot.resistance_at(pot.taps - 1)

@@ -395,3 +395,132 @@ actuator precisely because it is not a stored parameter.
    guard on, to validate `plan_curve()` against the real house.
 3. Answer question 2 (sensor type and excitation) and build the emulator once
    the control logic is proven, moving the last hop off Modbus entirely.
+
+## 7. Hardware implementation plan for this house
+
+### 7.1 What the Tecalor documentation already settles
+
+From the TTF / TTF cool installation manual and the electrical schematic for
+this house, so none of this needs measuring:
+
+| | |
+|---|---|
+| Sensor | **AFS 2** outdoor sensor, supplied in the box with the unit |
+| Location | North or north-east wall, ≥ 2.5 m above ground, ≥ 1 m from windows and doors, free to the weather but out of direct sun. The schematic says *"Zur Nordseite des Gebäudes"* |
+| Terminals | **X2 `T(A)`** for the sensor, **X26** (`Masseblock für Kleinspannung`) for its ground |
+| Voltage class | `Sicherheitskleinspannung` — SELV. The sensor input is in the low-voltage section, separated from the 400 V compressor wiring |
+| Cable | `2×2×0,8 mm²` — **two pairs, only one needed**, so a spare pair already runs to the sensor position |
+| Characteristic | One of the two tables printed in the manual: PT 1000 or KTY |
+| Failure mode | An open circuit raises **`FÜHLERBRUCH E 71`** on the display and in the fault list |
+
+The important consequence: the AFS 2 is a **separate climate sensor on the
+house wall**, not a probe inside a refrigerant circuit. Precondition 1 in
+section 2 — never manipulate a sensor the unit uses for defrost or compressor
+protection — is therefore satisfied. This approach is safe for this pump.
+
+The manual's characteristic table, now encoded as a test in
+`tests/test_sensors.py` (`TECALOR_TABLE`):
+
+| °C | PT 1000 Ω | KTY Ω |
+|---|---|---|
+| −30 | 882 | 1250 |
+| −20 | 922 | 1367 |
+| −10 | 961 | 1495 |
+| 0 | 1000 | 1630 |
+| 10 | 1039 | 1772 |
+| 20 | 1078 | 1922 |
+| 25 | 1097 | 2000 |
+| 40 | 1155 | 2245 |
+| 100 | 1385 | 3392 |
+
+`Pt1000Sensor` reproduces the PT 1000 column to within 1 Ω and the new
+`KtySensor` the KTY column to within 4 Ω, both asserted by tests.
+
+### 7.2 Step 1 — the one measurement that unblocks everything
+
+Open question 2 reduces to a single reading, because the two candidate
+characteristics are hundreds of ohms apart at any plausible outdoor
+temperature:
+
+| Outdoor | PT 1000 | KTY |
+|---|---|---|
+| 5 °C | 1020 Ω | 1700 Ω |
+| 10 °C | 1039 Ω | 1772 Ω |
+| 15 °C | 1058 Ω | 1846 Ω |
+| 20 °C | 1078 Ω | 1922 Ω |
+
+Procedure — **switch the unit off at the isolator first**; the sensor terminals
+are SELV but the enclosure they sit in is not, and opening it is installer
+territory:
+
+1. Note the outdoor temperature the pump currently shows (`ANLAGE →
+   AUSSENTEMPERATUR`, or input register 506 over Modbus — read-only, no writes).
+2. Power down. Disconnect the AFS 2 at **X2 `T(A)`** / **X26**.
+3. Measure its resistance. ~1 kΩ ⇒ **PT 1000**; ~1.7–1.9 kΩ ⇒ **KTY**. Compare
+   against the table for the temperature from step 1 to confirm.
+4. Reconnect the sensor, restore power, check the displayed outdoor temperature
+   still matches and no `E 71` is logged.
+5. Separately, with the sensor disconnected and the unit powered, measure the
+   open-circuit voltage across `T(A)`–X26, then the voltage across a known
+   resistor (1 kΩ 0.1 %) in its place, to get the excitation current. This
+   decides nothing about the ladder, which has no voltage limit, but it is
+   needed if a digital potentiometer is ever used instead.
+
+Record the results in section 6, question 2.
+
+### 7.3 Step 2 — the ladder, sized for each outcome
+
+Both branches are already modelled by `ResistorLadder` in `sensors.py`, so the
+firmware can be written against either. Figures below are computed, not
+estimated — see the tests.
+
+**If PT 1000** (the likely case): base 850 Ω 0.1 % plus binary-weighted
+1, 2, 4, 8, 16, 32, 64, 128, 256 Ω, nine 0.1 % resistors, each shorted by a
+latching relay.
+
+- Range 850 … 1361 Ω = **−38 °C … +94 °C**, comfortably past the −19 °C floor
+- Resolution **0.25 K** across the whole heating range
+- −19 °C is tap 76, 0 °C is tap 150, 20 °C is tap 228
+
+**If KTY**: base 1240 Ω plus 2, 4, 8, … 1024 Ω (ten resistors, 2 Ω steps).
+
+- Range 1240 … 3286 Ω = **−31 °C … +95 °C**
+- Resolution **0.13–0.16 K**
+
+Everything else in section 3 is unchanged: latching relays so nothing draws
+coil current between changes, and the DPDT bypass relay carrying both sensor
+wires with the real AFS 2 on the normally-closed contacts.
+
+### 7.4 Step 3 — bench before house
+
+Never connect a first build to the pump. With the ladder built and the ESP32
+driving it:
+
+1. Verify every one of the 512 (or 1024) codes against a four-wire meter.
+   `ResistorLadder.resistance_at()` is the expected value; tolerance stack-up
+   on 0.1 % parts should stay inside ±1 Ω.
+2. Drive the ladder from a spare PT 1000 simulator or a second WPM if one can
+   be borrowed, and confirm the displayed temperature tracks.
+3. Prove the fail-safe by pulling power mid-sequence: the bypass relay must
+   drop and the real sensor must appear at the terminals, with no `E 71`.
+4. Let the watchdog time out deliberately and confirm the same.
+
+### 7.5 Step 4 — install
+
+Mount the box at the **indoor unit**, not outdoors, and use the spare pair in
+the existing `2×2×0,8 mm²` cable to bring the real AFS 2 into the box. The
+emulated pair then runs the short distance to X2/X26. Nothing new needs
+pulling through the wall.
+
+Start with `max_shift` at 2 K for a week and the plan applied by hand before
+letting `curve run` drive it.
+
+### 7.6 What is still open
+
+- Which characteristic the AFS 2 is (step 1). Everything else is ready for
+  both answers.
+- The excitation figures, needed only if a digital potentiometer replaces the
+  ladder.
+- Whether the WPM averages outdoor temperature over 24 h for its heating-season
+  decision (section 2, item 6). If it does, long shifts in the shoulder seasons
+  need a guard.
