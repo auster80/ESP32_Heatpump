@@ -77,81 +77,107 @@ Read these before wiring anything into the heat pump.
 
 ## 3. Hardware
 
+### 3.1 The topology
+
+The real AFS 2 **stays in the measurement path**. A digital rheostat in
+parallel pulls the presented resistance down (colder); a small fixed resistor
+in series biases the whole range up (warmer) so both directions are reachable.
+
 ```
-                 ┌──────────────────────────────────────────────────────────┐
-                 │  emulator (near the indoor unit)                          │
-   real outdoor  │  ┌─────────────┐   ┌──────────┐   ┌─────────────────────┐ │
-   sensor ───────┼─►│ ADS1115 +   │──►│  ESP32   │──►│ AD5272 digipot      │─┼──┐
-   (2 wires)     │  │ 10k 0.1 %   │   │ ESPHome  │   │ (isolated section)  │ │  │
-                 │  │ divider     │   │ MQTT     │   └─────────────────────┘ │  │  DPDT relay
-                 │  └─────────────┘   │ watchdog │──► relay coil             │  │  NC: real sensor
-                 │                    └──────────┘                           │  │  NO: emulated
-                 └───────────────────────────────────────────────────────────┘  ▼
-                                                                         heat pump sensor input
+  X2  T(A) o───────┬──────────[ K1 · NO ]──────┬──── R_bias 39R 0.1% ────┐
+                   │                            │                         │
+                   │                            └──── AD5272 rheostat ────┤
+                   │                                   (100k, 1024 taps)  │
+                   │                                                      │
+                   └──────────[ K1 · NC ]─────────────────────────────────┤
+                                                                          │
+                                                          real AFS 2 ─────┤
+                                                        (north wall)      │
+  X26 GND  o──────────────────────────────────────────────────────────────┘
 ```
 
-### Option A: digital potentiometer (NTC sensors, excitation ≤ 5 V)
+K1 de-energised (NC) = the raw AFS 2 straight to the pump, exactly as today.
+K1 energised (NO) = bias + rheostat in circuit.
 
-- **Resistance emulation:** Analog Devices AD5272-100 (100 kΩ, 1024 taps,
-  I²C, ±1 % end-to-end, ~35 Ω wiper). In rheostat mode it produces
-  35 Ω … 100 kΩ in 98 Ω steps. With a 10 kΩ NTC that is 0.08 K resolution
-  at 0 °C and 0.3 K at 25 °C, and it covers **−19 °C to +50 °C**. For colder
-  climates put two AD5272-100 in series (−30 °C, 2048 taps) or switch a
-  fixed 47 kΩ resistor in series with a small relay below −15 °C.
-  `tibber-heatpump-bridge curve-plan` prints the tap for the configured part.
-- **Isolation:** the pump's sensor input is referenced to its controller
-  ground. Put the AD5272 on an isolated 5 V rail (a B0505S-1W isolated DC/DC)
-  behind an I²C isolator (TI ISO1540). The pot terminals then float at
-  whatever the pump uses. Skipping isolation works on some pumps and
-  destroys the controller on others; do not skip it.
-- **Write enable:** the AD5272 powers up with the wiper frozen. Write
-  control register bit 1 (`0x1C 0x02`) once after boot before RDAC writes
-  (`0x04|hi, lo`). Address 0x2F with ADDR tied to GND.
-- **Reading the real sensor:** the sensor is disconnected from the pump and
-  measured by us: a ratiometric divider with a 10 kΩ 0.1 % reference against
-  3.3 V into an ADS1115 (16-bit, I²C). ESPHome's `resistance` and `ntc`
-  components turn that into °C with the same beta the pump uses. An
-  alternative is to ignore the original sensor and mount a DS18B20 next to
-  it, but reusing the original keeps the pump's calibration.
-- **Fail-safe relay:** a DPDT signal relay (e.g. Omron G6K-2P) carries the
-  two sensor wires. Its normally-closed contacts connect the real sensor to
-  the pump; the coil is driven only while the ESP32 refreshes a hardware
-  watchdog (a TPL5010 or a simple 555 retriggerable monostable with a ~15 min
-  period fed by a heartbeat pin). Power loss, a firmware hang, or a stalled
-  controller all drop the relay and the pump sees its real sensor again.
+### 3.2 Why not synthesise the resistance outright
 
-### Option B: switched resistor ladder (PT1000, or any excitation voltage)
+An earlier draft of this document proposed a binary-weighted resistor ladder
+switched by nine relays. That was wrong, for a reason worth recording:
 
-PT1000 spans only 880 Ω (−30 °C) to 1155 Ω (+40 °C), 3.85 Ω/K. No common
-digital potentiometer has both a ≤ 1 kΩ range and 1000 taps, so use a fixed
-850 Ω 0.1 % resistor plus a binary-weighted ladder: 1, 2, 4, 8, 16, 32, 64,
-128, 256 Ω (nine 0.1 % resistors), each shorted by a latching signal relay.
-That gives 0–511 Ω in 1 Ω steps (0.26 K), no voltage limit, galvanic
-isolation for free, and zero coil power between changes. The same ladder
-with 100 Ω … 51.2 kΩ elements emulates a 10 kΩ NTC on pumps with 12 V or
-pulsed excitation. Nine relays are more soldering but nothing exotic.
+- Its LSB was **1 Ω**, and it put **nine relay contacts in series with the
+  measurement**. Signal-relay contact resistance is 50–100 mΩ each and drifts
+  at dry-circuit currents, where there is no wetting current and contacts
+  oxidise. The error source sat in the same path as the signal, at the same
+  order as the LSB.
+- Nine latching relays means eighteen coil drives, a large board and many
+  joints, to control a span of about 150 Ω.
 
-### Option C: active emulation (advanced)
+The shunt puts the imprecise, active part in a **high-impedance parallel path**
+where its error is divided down. A 1 % rheostat tolerance becomes ≈ 0.13 K on
+a 4 K shift, and it is a fixed gain error that calibrates out by measuring the
+part once. Contact resistance disappears from the problem: the only contact in
+the measurement path is K1, and K1 is either fully in or fully out.
 
-An op-amp current sink that measures the voltage across the terminals and
-sinks `V / R_target` emulates any resistance at any excitation with DAC
-resolution, but it must be stable against the pump's sampling scheme and is
-harder to make fail-safe. Only worth it if A and B do not fit.
+It also removes an entire subsystem. Because the real sensor is still in
+circuit, **the emulator never has to measure the outdoor temperature** — real
+weather passes through by itself. No ADS1115, no divider, no second sensor,
+and the pump keeps the sensor it was commissioned against.
 
-### Bill of materials (option A)
+### 3.3 Closing the loop without a second sensor
 
-| Part                                   | Approx. price | Note                                      |
-|----------------------------------------|---------------|-------------------------------------------|
-| ESP32 dev board                        | 8 €           | ESPHome, Wi-Fi, MQTT                      |
-| ADS1115 module                         | 4 €           | 16-bit ADC for the real sensor            |
-| AD5272BRMZ-100 (×1 or ×2)              | 6 € each      | 1024-tap 100 kΩ digipot                   |
-| ISO1540 I²C isolator + B0505S DC/DC    | 8 €           | galvanic isolation of the pot section     |
-| DPDT signal relay + driver transistor  | 3 €           | fail-safe bypass                          |
-| TPL5010 or NE555 watchdog              | 2 €           | hardware heartbeat                        |
-| 10 kΩ 0.1 % resistor, passives, box    | 5 €           |                                           |
+The controller does need the *true* outdoor temperature to pick a tap, because
+a parallel shunt scales resistance rather than adding kelvin. It gets it from
+the pump itself: read the manipulated value from input register 506
+(**read-only — no write endurance cost**) and invert the known shunt.
 
-Under 50 € in parts. A commercial Ngenic Tune plus gateway is a few hundred
-euros and needs its cloud; this box needs only MQTT on your LAN.
+`ShuntEmulator.recover_real_c()` does this and is accurate to **±0.04 K** even
+with register 506 quantised to 0.1 °C.
+
+### 3.4 Components
+
+| # | Part | Why |
+|---|---|---|
+| 1 | **ESP32** dev board (ESPHome) | control, Wi-Fi/MQTT |
+| 2 | **AD5272BRMZ-100** — 100 kΩ, 1024-tap I²C digital rheostat | the shunt. ±1 % end-to-end, ~35 Ω wiper, 5.5 V max across terminals |
+| 3 | **39 Ω 0.1 % 25 ppm** resistor | series bias, buys the "pretend it is milder" direction |
+| 4 | **ISO1540** I²C isolator + **B0505S-1W** isolated DC/DC | floats the rheostat section at the pump's X26 potential. Not optional |
+| 5 | **DPDT signal relay** (Omron G6K-2P) + driver transistor + flyback diode | K1, the bypass. NC = real sensor |
+| 6 | **TPL5010** (or NE555 monostable) | hardware watchdog holding K1 in only while the ESP32 heartbeats |
+| 7 | 5 V PSU, enclosure, terminal blocks | |
+
+Roughly €40. Note what is **not** in the list: no ADC, no second temperature
+sensor, no resistor ladder, no latching relays.
+
+### 3.5 What it achieves
+
+Measured against the model, PT1000, 39 Ω bias, 100 kΩ rheostat:
+
+| Real outdoor | Shift range | Tap accuracy |
+|---|---|---|
+| −19 °C | −7.6 … +10.9 K | better than 0.05 K |
+| 0 °C | −7.3 … +29.7 K | better than 0.05 K |
+| +10 °C | −7.1 … +39.5 K | better than 0.05 K |
+
+The cold direction is bounded by the −30 °C floor rather than by the hardware.
+`ShuntEmulator.safe_taps()` enforces that window, because at the closed end the
+rheostat approaches its wiper resistance and would short the sensor — a
+`FÜHLERBRUCH E 71` to the pump.
+
+`max_shift` in the controller should still be set far tighter (2 K to start).
+
+### 3.6 Safety
+
+- **K1 is the fail-safe**, not software. Power loss, firmware hang, or a stale
+  controller drops the relay and the real AFS 2 returns.
+- The watchdog must be **hardware**. A timer inside the same firmware that
+  might hang is not a watchdog.
+- **Isolation is mandatory.** The rheostat sits across the pump's SELV sensor
+  input. Tying an earthed ESP32 ground to X26 risks a ground loop through the
+  measurement or worse. €8 of parts.
+- Before the AD5272 will move its wiper it needs the control register written
+  once after boot (`0x1C 0x02`); it powers up frozen.
+- Verify the excitation stays within the AD5272's 5.5 V terminal rating
+  (§7.2 step 5). If the WPM drives more than that, this topology is out.
 
 ## 4. Firmware
 
@@ -468,28 +494,22 @@ territory:
 
 Record the results in section 6, question 2.
 
-### 7.3 Step 2 — the ladder, sized for each outcome
+### 7.3 Step 2 — size the shunt for whichever sensor it is
 
-Both branches are already modelled by `ResistorLadder` in `sensors.py`, so the
-firmware can be written against either. Figures below are computed, not
-estimated — see the tests.
+The topology in section 3 does not change between PT 1000 and KTY; only the
+bias resistor and the useful tap range do, because the two characteristics sit
+at different resistances. `ShuntEmulator` takes the sensor as a parameter, so
+the firmware is identical either way.
 
-**If PT 1000** (the likely case): base 850 Ω 0.1 % plus binary-weighted
-1, 2, 4, 8, 16, 32, 64, 128, 256 Ω, nine 0.1 % resistors, each shorted by a
-latching relay.
+**If PT 1000** (the likely case): 39 Ω bias, AD5272-100. Reaches −7.3 … +29.7 K
+at 0 °C, tap accuracy better than 0.05 K, with the cold end clamped by the
+−30 °C safety floor rather than the hardware.
 
-- Range 850 … 1361 Ω = **−38 °C … +94 °C**, comfortably past the −19 °C floor
-- Resolution **0.25 K** across the whole heating range
-- −19 °C is tap 76, 0 °C is tap 150, 20 °C is tap 228
-
-**If KTY**: base 1240 Ω plus 2, 4, 8, … 1024 Ω (ten resistors, 2 Ω steps).
-
-- Range 1240 … 3286 Ω = **−31 °C … +95 °C**
-- Resolution **0.13–0.16 K**
-
-Everything else in section 3 is unchanged: latching relays so nothing draws
-coil current between changes, and the DPDT bypass relay carrying both sensor
-wires with the real AFS 2 on the normally-closed contacts.
+**If KTY**: the sensor sits near 1630 Ω at 0 °C and changes ~14 Ω/K, roughly
+3.7× more resistance change per kelvin than PT 1000. The same 100 kΩ rheostat
+therefore produces a *smaller* shift for the same tap, and the bias resistor
+needs to be about 3.7× larger (150 Ω) for the same warm-side range. Confirm
+with `ShuntEmulator(sensor=KtySensor(), ...).shift_range_k()` once measured.
 
 ### 7.4 Step 3 — bench before house
 

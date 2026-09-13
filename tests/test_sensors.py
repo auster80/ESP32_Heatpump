@@ -8,6 +8,7 @@ from tibber_heatpump_bridge.sensors import (
     NtcSensor,
     Pt1000Sensor,
     ResistorLadder,
+    ShuntEmulator,
     coverage_c,
     emulate,
     fake_temperature,
@@ -190,3 +191,83 @@ class ResistorLadderTests(unittest.TestCase):
         result = emulate(sensor, ladder, -19.0)
         self.assertLess(abs(result.error_k), 0.3)
         self.assertEqual(ladder.resistance_at(result.tap), result.achieved_ohms)
+
+
+class ShuntEmulatorTests(unittest.TestCase):
+    """Parallel digital rheostat across the real AFS 2, with a small series bias."""
+
+    def _rig(self) -> ShuntEmulator:
+        return ShuntEmulator(
+            sensor=Pt1000Sensor(),
+            pot=DigitalPotentiometer(full_scale_ohms=100_000.0, taps=1024, wiper_ohms=35.0),
+            bias_ohms=39.0,
+        )
+
+    def test_open_rheostat_presents_the_bias_warmer(self):
+        """With the shunt open only the series bias acts, so the pump reads warm."""
+        rig = self._rig()
+        self.assertLess(rig.shift_k(0.0, rig.pot.taps - 1), -6.0)
+
+    def test_never_presents_outside_the_safe_window(self):
+        rig = self._rig()
+        for real_c in (-19.0, 0.0, 10.0):
+            lowest, highest = rig.safe_taps(real_c)
+            self.assertGreaterEqual(rig.presented_c(real_c, lowest), rig.min_present_c - 0.5)
+            self.assertLessEqual(rig.presented_c(real_c, highest), rig.max_present_c + 0.5)
+            # the tap below the safe floor would short the sensor
+            if lowest > 0:
+                self.assertLess(rig.presented_c(real_c, lowest - 1), rig.min_present_c)
+
+    def test_a_requested_shift_is_clamped_not_obeyed_blindly(self):
+        rig = self._rig()
+        tap = rig.tap_for_shift(0.0, 60.0)
+        self.assertGreaterEqual(rig.presented_c(0.0, tap), rig.min_present_c - 0.5)
+
+    def test_closing_the_rheostat_makes_it_look_colder(self):
+        rig = self._rig()
+        shifts = [rig.shift_k(0.0, tap) for tap in (1023, 700, 400, 200)]
+        self.assertEqual(shifts, sorted(shifts), "shift must increase as the shunt closes")
+
+    def test_reaches_both_directions_across_the_heating_range(self):
+        rig = self._rig()
+        for real_c in (-19.0, -10.0, 0.0, 10.0):
+            low, high = rig.shift_range_k(real_c)
+            self.assertLess(low, -4.0, f"cannot pretend it is milder at {real_c}")
+            self.assertGreater(high, 5.0, f"cannot pretend it is colder at {real_c}")
+
+    def test_tap_for_shift_round_trips(self):
+        rig = self._rig()
+        for real_c in (-19.0, -5.0, 0.0, 8.0):
+            for want in (-4.0, -2.0, 0.0, 2.0, 4.0, 6.0):
+                tap = rig.tap_for_shift(real_c, want)
+                self.assertAlmostEqual(rig.shift_k(real_c, tap), want, delta=0.1)
+
+    def test_resolution_is_far_finer_than_a_ladder(self):
+        rig = self._rig()
+        for want in (-4.0, 0.0, 4.0):
+            tap = rig.tap_for_shift(0.0, want)
+            neighbour = rig.shift_k(0.0, tap + 1)
+            self.assertLess(abs(neighbour - rig.shift_k(0.0, tap)), 0.1)
+
+    def test_recovers_the_true_outdoor_temperature_from_the_pumps_reading(self):
+        """The pump reports 0.1 C resolution on register 506; inverting the
+        shunt must give back the real value, so no second sensor is needed."""
+        rig = self._rig()
+        for real_c in (-19.0, -10.0, 2.5, 12.0):
+            tap = rig.tap_for_shift(real_c, 3.0)
+            reported = round(rig.presented_c(real_c, tap), 1)
+            self.assertAlmostEqual(rig.recover_real_c(reported, tap), real_c, delta=0.1)
+
+    def test_part_tolerance_costs_only_a_fraction_of_the_shift(self):
+        """A 1 % rheostat error costs ~0.13 K on a 4 K shift -- an order below
+        what a series ladder's contact resistance would cost, and a fixed gain
+        error that can be calibrated out by measuring the part once and
+        entering the measured value as ``full_scale_ohms``."""
+        nominal = self._rig()
+        skewed = ShuntEmulator(
+            sensor=Pt1000Sensor(),
+            pot=DigitalPotentiometer(full_scale_ohms=101_000.0, taps=1024, wiper_ohms=35.0),
+            bias_ohms=39.0,
+        )
+        tap = nominal.tap_for_shift(0.0, 4.0)
+        self.assertLess(abs(skewed.shift_k(0.0, tap) - nominal.shift_k(0.0, tap)), 0.2)
