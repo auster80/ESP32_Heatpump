@@ -155,6 +155,33 @@ radio transmits, the G6K-2P coil draws ~40 mA, and the B0505S needs its
 quiescent plus the few milliamps the rheostat section actually uses. **5 V at
 1 A** is comfortable with headroom; 500 mA is cutting it close on Wi-Fi peaks.
 
+**Is there a SELV supply on the pump?** Yes, and it is the wrong one. Terminal
+block **X2** carries `+`, `⊥`, `L`, `H` — the CAN bus that powers the FEK
+remote, fed from an internal supply module (`X29` mains in, `X30`/`X31` CAN
+out). Three reasons not to hang the emulator on it, the third decisive:
+
+1. **No rating is published.** The manual gives the terminal but no voltage and
+   no current budget. It is sized for an FEK: an LCD, a knob and a few buttons.
+2. **Stiebel do not use it for their own gateway.** The ISG connects to `H`,
+   `L` and `⊥` only, and the manual says plainly *"Die Spannungsversorgung des
+   ISG erfolgt nicht über die Wärmepumpe."* If the bus rail could not carry
+   their own small gateway, it will not carry an ESP32 whose radio pulls
+   350 mA peaks.
+3. **Its return is `⊥`, which is X26 — the exact node the AFS 2 is measured
+   against.** Drawing Wi-Fi current pulses through that ground modulates the
+   reference of the measurement we are trying to control to a fraction of a
+   kelvin. A PT 1000 at 0.1 °C resolution is 0.39 Ω; this is a sub-millivolt
+   measurement and we would be injecting hundreds of milliamps of switching
+   noise into its return path. That is precisely what the isolation in §3.4
+   exists to prevent, so powering from the bus would undo it.
+
+Browning out that rail would also disturb the FEK, which is a control the
+household actually uses.
+
+Measure the `+` rail's voltage anyway while the covers are off (§7.2) — it is
+free information, and a genuinely low-power design that never transmits could
+revisit this. For an ESP32 with Wi-Fi, use one of the two sources below.
+
 Two sensible sources:
 
 **A. A USB wall-wart into a socket near the indoor unit.** Simplest, and the
@@ -540,7 +567,10 @@ territory:
    against the table for the temperature from step 1 to confirm.
 4. Reconnect the sensor, restore power, check the displayed outdoor temperature
    still matches and no `E 71` is logged.
-5. Separately, with the sensor disconnected and the unit powered, measure the
+5. While the covers are off, measure the voltage on the X2 `+` terminal
+   against `⊥`. Not to power from it (§3.5 explains why not) but because it is
+   free information for any future low-power variant.
+6. Separately, with the sensor disconnected and the unit powered, measure the
    open-circuit voltage across `T(A)`–X26, then the voltage across a known
    resistor (1 kΩ 0.1 %) in its place, to get the excitation current. This
    decides nothing about the ladder, which has no voltage limit, but it is
