@@ -267,13 +267,13 @@ Development happens on `main` in
 - `docs/tibber-integrations.md` — which Tibber integrations could carry a
   bridge (Homey, Futurehome, Ngenic) and which cannot (vendor clouds).
 - `docs/virtual-outdoor-sensor.md` — design of the Ngenic-style sensor
-  emulator and its control logic; ends with the open questions that decide
-  the next step (heat pump model and interface, sensor type and excitation
-  voltage, indoor temperature source, coldest outdoor temperature, power
-  reading).
-- Not built yet: the runtime loop that applies `curve-plan` through the
-  emulator (`curve run`), the emulator hardware itself, and any Homey or
-  Futurehome adapter.
+  emulator and its control logic. Section 6 records what the target
+  installation turned out to be: a Tecalor TTF 13 cool behind an ISG plus
+  gateway, which exposes both SG Ready and the heating curve over Modbus TCP.
+  The emulator hardware is therefore **not** on the critical path; the curve
+  shift can be written to a register instead.
+- Not built yet: the runtime loop that applies `curve-plan` to the heat pump
+  (`curve run`), and any Homey or Futurehome adapter.
 
 ## Limitations
 

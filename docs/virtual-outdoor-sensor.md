@@ -267,11 +267,63 @@ sensible split for a house with floor heating: curve shifting for space
 heating, the price scheduler for hot water and for hard blocks in extreme
 price spikes.
 
-## 6. Open questions
+## 6. This installation
 
-1. Heat pump model and whether it has any interface from section 1.
-2. Sensor type and excitation voltage (section 2, steps 2–3).
-3. Where the indoor temperature comes from (Home Assistant entity, Zigbee
-   sensor, the pump's room unit).
-4. Coldest outdoor temperature you need to represent (one pot: −19 °C).
-5. Whether a power reading of the pump exists (better cost model).
+Answered from the existing Home Assistant configuration and from the register
+catalogue in the `Modbus Tool` project (`Modbus Doctor`), which was written
+against this very heat pump.
+
+1. **Heat pump model and interface.** A **Tecalor TTF 13 cool** (Stiebel
+   Eltron rebrand) behind an **ISG plus** gateway, reachable at
+   **`192.168.0.121:502`, unit ID 254**. That is the "Stiebel Eltron /
+   Tecalor" row of the table in section 1, so **the emulator hardware is not
+   needed**: the curve can be shifted digitally. Relevant holding registers:
+
+   | Register | Meaning | Range |
+   |---|---|---|
+   | 1501 | HC 1 comfort temperature (`Komforttemperatur HK1`) | 5…30 °C |
+   | 1502 | HC 1 eco temperature (`ECO-Temperatur HK1`) | 5…30 °C |
+   | 1503 | HC 1 heating curve rise (`Steigung Heizkurve HK1`) | 0…3 |
+   | 1507 | Fixed value operation (`Festwertbetrieb`) | off / 20…70 °C |
+   | 1509 | DHW comfort setpoint | 10…60 °C |
+   | 1510 | DHW eco setpoint | 10…60 °C |
+
+   There is also a **native SG Ready interface over Modbus** — holding 4000
+   (on/off), 4001 and 4002 (the two inputs), with the resulting state on
+   input register 5000. The `sgready` backend's relay hardware is therefore
+   unnecessary too; the same four states can be written directly. See
+   section 6.1.
+
+2. **Sensor type and excitation voltage.** Moot — no emulator is being built.
+   If it is ever revisited, the sensor is the one on the ISG/WPM terminal
+   block, not inside the outdoor unit.
+
+3. **Indoor temperature.** The FEK room unit, already exposed to Home
+   Assistant as `sensor.tecalor_raumtemperatur_isttemperatur_fek`. The
+   outdoor temperature is input register 506.
+
+4. **Coldest outdoor temperature to represent.** Still open. It only bounds
+   the planner's action set now that no resistor ladder has to cover it.
+
+5. **Power reading.** Daily compressor energy exists
+   (`sensor.tecalor_leistungsaufnahme_vd_heizen_tag` and
+   `..._warmwasser_tag`), which is enough to fit `PowerModel` from daily
+   totals but not for an instantaneous cost model. Whether an instantaneous
+   power register exists on this controller is unverified.
+
+### 6.1 Consequence for the next step
+
+Two actuator paths are available without building anything, and both are
+already supported by the `modbus` backend:
+
+- **SG Ready over Modbus** (holding 4000/4001/4002) for the coarse
+  `block`/`reduce`/`normal`/`boost`/`force` modes the scheduler produces.
+  This needs SG Ready enabled in the installer menu.
+- **Heating curve offset** (holding 1501/1502, optionally 1503) as the
+  fine-grained equivalent of the virtual outdoor sensor. `plan_curve()`
+  outputs a shift in kelvin; writing it as a comfort-temperature offset is
+  the same control problem with a different last hop.
+
+So the emulator hardware in sections 3 and 4 is **not on the critical path**
+for this house. What is: a `curve run` loop that applies the planned shift,
+and a decision on which of the two paths above carries space heating.
