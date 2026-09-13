@@ -284,7 +284,49 @@ Spread the observations over a few days of different weather and different
 taps. Confidence is reported as a ratio — how many times worse the runner-up
 fitted — because residuals scale with how hard the taps were driven.
 
-### 3.7 What it achieves
+### 3.7 What the WPM drives, and why it matters
+
+A resistive sensor is passive, so the controller has to *excite* it to measure
+it — there is no other way to read a resistance. Two standard front ends: a
+pull-up from the board's analog rail into an ADC, or a constant-current source.
+The Tecalor documentation does not say which, but the electrical schematic
+shows `+5V OUT GND` on the active flow sensors, so **the WPM3i's analog rail is
++5 V**. A divider from 5 V into a ~1 kΩ sensor puts the node near 2.5 V and
+passes ~2.5 mA.
+
+**It does not matter for the measurement.** Our network is passive and
+transparent: the WPM sees a resistance either way, and a resistor does not care
+how it is interrogated. That part of the design is indifferent to the
+excitation.
+
+**It matters because the AD5272 is a semiconductor, not a resistor.** Its `A`
+and `W` terminals must stay inside its own supply rails (GND to VDD, ±0.3 V).
+Above that the on-chip ESD diodes conduct, and two things go wrong at once: the
+diode shunts current into the part's supply so the presented resistance is no
+longer what was set, and the part can be damaged. Since the isolated 5 V rail
+is referenced to X26 and the sensor node sits between 0 V and the WPM's rail
+relative to X26, a 5 V front end is inside the rating with nothing to spare at
+the open-circuit end — which is why it gets measured rather than assumed.
+
+Two second-order effects, both consequences of the same fact:
+
+- **Wiper current.** The AD5272's wiper is rated for a few milliamps. At ~2.5 mA
+  total, and with the parallel leg carrying only a small fraction of that, this
+  is not close.
+- **Added capacitance.** The part adds a few picofarads across the input. If the
+  WPM multiplexes one ADC across several sensors with a short settling window,
+  that slightly slows settling. This is the one way a passive-looking addition
+  can perturb the reading, and it is worth watching for on the bench.
+
+**If the node turns out to exceed 5.5 V, swap the part, not the topology.** An
+earlier draft claimed a higher excitation would rule this approach out. That was
+wrong. The AD5290 is a ±15 V digital potentiometer with 256 taps, and because
+the parallel shunt is so forgiving about rheostat precision, 256 taps is still
+enough: worst case **0.36 K** per tap across a ±6 K working range, against
+0.09 K for the 1024-tap AD5272. Coarser, and entirely adequate for a heating
+curve.
+
+### 3.8 What it achieves
 
 Measured against the model, PT1000, 39 Ω bias, 100 kΩ rheostat:
 
@@ -301,7 +343,7 @@ rheostat approaches its wiper resistance and would short the sensor — a
 
 `max_shift` in the controller should still be set far tighter (2 K to start).
 
-### 3.8 Safety
+### 3.9 Safety
 
 - **K1 is the fail-safe**, not software. Power loss, firmware hang, or a stale
   controller drops the relay and the real AFS 2 returns.
@@ -312,8 +354,7 @@ rheostat approaches its wiper resistance and would short the sensor — a
   measurement or worse. €8 of parts.
 - Before the AD5272 will move its wiper it needs the control register written
   once after boot (`0x1C 0x02`); it powers up frozen.
-- Verify the excitation stays within the AD5272's 5.5 V terminal rating
-  (§7.2 step 5). If the WPM drives more than that, this topology is out.
+- Verify the sensor node stays within the AD5272's supply rails (§3.7).
 
 ## 4. Firmware
 
@@ -582,13 +623,23 @@ this house, so none of this needs measuring:
 | Terminals | **X2 `T(A)`** for the sensor, **X26** (`Masseblock für Kleinspannung`) for its ground |
 | Voltage class | `Sicherheitskleinspannung` — SELV. The sensor input is in the low-voltage section, separated from the 400 V compressor wiring |
 | Cable | `2×2×0,8 mm²` — **two pairs, only one needed**, so a spare pair already runs to the sensor position |
-| Characteristic | One of the two tables printed in the manual: PT 1000 or KTY |
+| Characteristic | One of the two tables printed in the manual: PT 1000 or KTY — see below |
+| Analog rail | **+5 V** (the schematic shows `+5V OUT GND` on the active flow sensors) |
 | Failure mode | An open circuit raises **`FÜHLERBRUCH E 71`** on the display and in the fault list |
 
 The important consequence: the AFS 2 is a **separate climate sensor on the
 house wall**, not a probe inside a refrigerant circuit. Precondition 1 in
 section 2 — never manipulate a sensor the unit uses for defrost or compressor
 protection — is therefore satisfied. This approach is safe for this pump.
+
+**Why the manual prints two tables.** The electrical schematic labels each
+sensor channel with its type, and the WPM3i uses *both*: `B1` and `B2` (the
+heat pump flow and return, on X2 terminals 1–4) are **PT 1000**, while `B3`,
+`B4` and `B5` are **KTY 81-210**. So the two tables are not alternatives for
+the same channel — they are different channels. The schematic extract does not
+label `T(A)`'s type, which is why the AFS 2 still has to be identified, but it
+does confirm the KTY column of the manual is the KTY 81-210 characteristic that
+`KtySensor` models.
 
 The manual's characteristic table, now encoded as a test in
 `tests/test_sensors.py` (`TECALOR_TABLE`):
