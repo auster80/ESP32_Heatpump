@@ -143,12 +143,56 @@ with register 506 quantised to 0.1 °C.
 | 4 | **ISO1540** I²C isolator + **B0505S-1W** isolated DC/DC | floats the rheostat section at the pump's X26 potential. Not optional |
 | 5 | **DPDT signal relay** (Omron G6K-2P) + driver transistor + flyback diode | K1, the bypass. NC = real sensor |
 | 6 | **TPL5010** (or NE555 monostable) | hardware watchdog holding K1 in only while the ESP32 heartbeats |
-| 7 | 5 V PSU, enclosure, terminal blocks | |
+| 7 | **5 V 1 A supply**, 1000 µF bulk cap, enclosure, terminal blocks | see §3.5 — the choice interacts with the isolation |
 
 Roughly €40. Note what is **not** in the list: no ADC, no second temperature
 sensor, no resistor ladder, no latching relays.
 
-### 3.5 What it achieves
+### 3.5 Powering it
+
+Budget, worst case: the ESP32 peaks around 350 mA at 3.3 V while the Wi-Fi
+radio transmits, the G6K-2P coil draws ~40 mA, and the B0505S needs its
+quiescent plus the few milliamps the rheostat section actually uses. **5 V at
+1 A** is comfortable with headroom; 500 mA is cutting it close on Wi-Fi peaks.
+
+Two sensible sources:
+
+**A. A USB wall-wart into a socket near the indoor unit.** Simplest, and the
+floating output of a double-insulated (Class II) supply is exactly what this
+design wants — see the grounding note below. Needs a socket within reach.
+
+**B. A DIN-rail 5 V supply fed from the `Steuerspannung` 230 V control feed**
+(`3×1,5 mm²`, `1×B16A` on this house's schematic). Tidiest permanent install:
+the emulator is powered whenever the pump is, and no separate socket or visible
+wall-wart. It is electrician work, needs its own fuse or MCB, and must not
+compromise the pump's own supply.
+
+Either way the emulator stays on its own supply — **do not** try to steal power
+from the sensor input or any other WPM terminal.
+
+**Grounding.** The ESP32 side must remain a *separate ground domain* from the
+pump's X26; bonding them defeats the point of the ISO1540 and B0505S. A Class
+II supply with a floating output keeps it separate by construction. The
+isolator also covers the development case where the ESP32's USB is plugged into
+an earthed laptop, which would otherwise tie earth to X26.
+
+**Losing power is a non-event, by design.** K1 drops, the real AFS 2 returns,
+the pump carries on exactly as it does today. A cheap supply failing costs a
+heating optimisation, not a heating system.
+
+**A sagging supply is the real risk, and it is not the same thing.** Brown-outs
+at Wi-Fi peaks reset the ESP32 in a loop, and a naive build would then chatter
+K1 between bypass and emulate — the pump would see its outdoor temperature jump
+several kelvin every few seconds, which at best confuses the curve and at worst
+trips a plausibility check. Two defences, both required:
+
+1. **1000 µF bulk on the 5 V rail** plus 100 nF decoupling at each chip.
+2. **A firmware hold-off** (§4): never energise K1 on boot. Come up in bypass,
+   and only pull the relay in after the controller has been connected and
+   holding a valid target for a settling period. A boot loop then parks
+   permanently in bypass, which is the safe state, instead of oscillating.
+
+### 3.6 What it achieves
 
 Measured against the model, PT1000, 39 Ω bias, 100 kΩ rheostat:
 
@@ -165,7 +209,7 @@ rheostat approaches its wiper resistance and would short the sensor — a
 
 `max_shift` in the controller should still be set far tighter (2 K to start).
 
-### 3.6 Safety
+### 3.7 Safety
 
 - **K1 is the fail-safe**, not software. Power loss, firmware hang, or a stale
   controller drops the relay and the real AFS 2 returns.
@@ -188,6 +232,16 @@ heartbeat arrives for 20 minutes or the target is out of bounds. It is
 written against the datasheet and ESPHome documentation but has not been
 run on hardware; treat it as a starting point and verify the I²C frames
 with a logic analyser before connecting the pump.
+
+Two rules the sketch must enforce beyond what it does today:
+
+- **Boot into bypass.** K1 stays de-energised until MQTT is connected, a
+  retained `target_c` has arrived, and a settling period (60 s is plenty) has
+  elapsed. This is what turns a brown-out boot loop into a harmless permanent
+  bypass rather than a relay chattering against the pump's sensor input
+  (§3.5).
+- **Rate-limit the relay.** Never toggle K1 more than once a minute, whatever
+  the controller asks for.
 
 MQTT topics (all under `heatpump/outdoor/`):
 
