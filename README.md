@@ -277,6 +277,11 @@ Development happens on `main` in
 <https://github.com/auster80/ESP32_Heatpump>. The project started in the
 `Claude_Code_Default` scratch repository and was moved here with its history.
 
+- `docs/existing-home-assistant-control.md` — **read this first.** A working
+  price-aware controller is already in production for the target house (Home
+  Assistant + three Node-RED flows driving the SG Ready contacts through a
+  Shelly Plus Uni). It already covers what `tibber.py` and `schedule.py` do,
+  and the bridge must not drive the same contacts alongside it.
 - `docs/tibber-integrations.md` — which Tibber integrations could carry a
   bridge (Homey, Futurehome, Ngenic) and which cannot (vendor clouds).
 - `docs/virtual-outdoor-sensor.md` — design of the Ngenic-style sensor
@@ -287,6 +292,10 @@ Development happens on `main` in
   though this pump does have Modbus.
 - Not built yet: the runtime loop that applies `curve-plan` to the heat pump
   (`curve run`), the emulator hardware, and any Homey or Futurehome adapter.
+- The part of this repo with no counterpart in the existing system is the
+  modelled curve shifting (`curve.py`, `learning.py`). The next step is to run
+  `curve-plan` in parallel with the Node-RED flows and compare, not to switch
+  the house over.
 
 ## Limitations
 
