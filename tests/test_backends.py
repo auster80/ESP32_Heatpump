@@ -209,6 +209,81 @@ class ModbusBackendTests(unittest.TestCase):
             ModbusWrite(1, 70000)
 
 
+class ModbusWriteGuardTests(unittest.TestCase):
+    """Holding registers on a heat pump are EEPROM-backed parameters with a
+    finite number of write cycles; re-applying an unchanged mode must not
+    spend one. Coils and registers that only emulate a contact are volatile
+    and may be rewritten freely."""
+
+    def _backend(self, client, **kwargs) -> ModbusBackend:
+        return ModbusBackend(
+            "hp.local",
+            {
+                Mode.NORMAL: [ModbusWrite(1501, 210)],
+                Mode.BOOST: [ModbusWrite(1501, 225)],
+                Mode.BLOCK: [ModbusWrite(4001, 1, volatile=True)],
+            },
+            unit=7,
+            client_factory=lambda: client,
+            **kwargs,
+        )
+
+    def test_unchanged_value_is_not_rewritten(self):
+        client = FakeModbusClient()
+        backend = self._backend(client)
+        backend.apply(Mode.NORMAL)
+        backend.apply(Mode.NORMAL)
+        backend.apply(Mode.NORMAL)
+        self.assertEqual(client.writes, [("holding", 1501, 210, 7)])
+
+    def test_changed_value_is_written_again(self):
+        client = FakeModbusClient()
+        backend = self._backend(client)
+        backend.apply(Mode.NORMAL)
+        backend.apply(Mode.BOOST)
+        backend.apply(Mode.NORMAL)
+        self.assertEqual(
+            client.writes,
+            [("holding", 1501, 210, 7), ("holding", 1501, 225, 7), ("holding", 1501, 210, 7)],
+        )
+
+    def test_volatile_target_is_always_rewritten(self):
+        client = FakeModbusClient()
+        backend = self._backend(client)
+        backend.apply(Mode.BLOCK)
+        backend.apply(Mode.BLOCK)
+        self.assertEqual(client.writes, [("holding", 4001, 1, 7), ("holding", 4001, 1, 7)])
+
+    def test_failed_write_is_not_remembered(self):
+        client = FakeModbusClient()
+        client.write_register = lambda *a, **k: FakeResult(error=True)  # type: ignore[assignment]
+        backend = self._backend(client)
+        with self.assertRaises(BackendError):
+            backend.apply(Mode.NORMAL)
+        client.write_register = FakeModbusClient.write_register.__get__(client)
+        backend.apply(Mode.NORMAL)
+        self.assertEqual(client.writes, [("holding", 1501, 210, 7)])
+
+    def test_daily_budget_refuses_further_writes_to_that_address(self):
+        now = [0.0]
+        client = FakeModbusClient()
+        backend = self._backend(client, max_writes_per_day=2, clock=lambda: now[0])
+        for value in (210, 225, 210, 225):
+            backend.apply(Mode.NORMAL if value == 210 else Mode.BOOST)
+            now[0] += 3600.0
+        self.assertEqual(len(client.writes), 2)
+
+    def test_budget_window_rolls_forward(self):
+        now = [0.0]
+        client = FakeModbusClient()
+        backend = self._backend(client, max_writes_per_day=2, clock=lambda: now[0])
+        backend.apply(Mode.NORMAL)
+        backend.apply(Mode.BOOST)
+        now[0] += 86400.0 + 1.0
+        backend.apply(Mode.NORMAL)
+        self.assertEqual(len(client.writes), 3)
+
+
 class MqttBackendTests(unittest.TestCase):
     def test_publishes_payload_with_retain(self):
         client = FakeMqttClient()

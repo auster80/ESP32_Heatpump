@@ -109,6 +109,7 @@ def _build_modbus(options: dict[str, Any]) -> Backend:
                     address=int(entry["address"]),
                     value=int(entry["value"]),
                     kind=str(entry.get("kind", "holding")),
+                    volatile=bool(entry.get("volatile", False)),
                 )
                 for entry in entries
             ]
@@ -122,6 +123,7 @@ def _build_modbus(options: dict[str, Any]) -> Backend:
         port=int(options.get("port", 502)),
         unit=int(options.get("unit", 1)),
         timeout=float(options.get("timeout_seconds", 5.0)),
+        max_writes_per_day=(int(options["max_writes_per_day"]) if "max_writes_per_day" in options else None),
     )
 
 

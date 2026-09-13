@@ -208,6 +208,19 @@ from your heat pump's Modbus manual; nothing in the bridge is device specific.
 Negative values are written as 16-bit two's complement, which is how signed
 registers such as a heating-curve offset are usually encoded.
 
+**Write endurance.** A register that holds a *parameter* — a setpoint, a curve
+rise — lives in the controller's non-volatile memory and survives a finite
+number of write cycles. Re-sending the same value every `reapply_minutes`
+would spend roughly 35 000 of them a year, per register, for no effect. The
+backend therefore writes such a register **only when the value changes**, and
+`max_writes_per_day` adds a hard per-address budget; when it is spent the
+write is refused and logged and the heat pump keeps its current setting.
+
+Mark targets that do *not* persist with `volatile = true` — coils, and
+registers that merely emulate a contact such as Stiebel/Tecalor's SG Ready
+inputs. Those are rewritten every tick, so a device that rebooted is repaired.
+See `docs/virtual-outdoor-sensor.md` §6.1.
+
 ### MQTT (`type = "mqtt"`)
 
 Publishes the mode name (or a per-mode payload) to one topic with `retain`,
@@ -267,13 +280,13 @@ Development happens on `main` in
 - `docs/tibber-integrations.md` — which Tibber integrations could carry a
   bridge (Homey, Futurehome, Ngenic) and which cannot (vendor clouds).
 - `docs/virtual-outdoor-sensor.md` — design of the Ngenic-style sensor
-  emulator and its control logic. Section 6 records what the target
-  installation turned out to be: a Tecalor TTF 13 cool behind an ISG plus
-  gateway, which exposes both SG Ready and the heating curve over Modbus TCP.
-  The emulator hardware is therefore **not** on the critical path; the curve
-  shift can be written to a register instead.
+  emulator and its control logic. Section 6 records the target installation (a
+  Tecalor TTF 13 cool behind an ISG plus gateway, −19 °C design floor, The
+  Hague), why write endurance rules out continuously writing setpoint
+  registers, and why the emulator is still the better long-term design even
+  though this pump does have Modbus.
 - Not built yet: the runtime loop that applies `curve-plan` to the heat pump
-  (`curve run`), and any Homey or Futurehome adapter.
+  (`curve run`), the emulator hardware, and any Homey or Futurehome adapter.
 
 ## Limitations
 

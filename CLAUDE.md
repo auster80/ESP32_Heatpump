@@ -40,6 +40,7 @@ Curve shifting (virtual outdoor sensor, see `docs/virtual-outdoor-sensor.md`):
 Conventions:
 
 - Keep the core free of third-party dependencies; new optional integrations go into `backends/` behind a lazy import and an extra in `pyproject.toml`.
+- Never write a heat pump *parameter* register on a timer. Non-volatile memory has a finite write budget, so `backends/modbus.py` writes a register only when the value changes and enforces `max_writes_per_day`; only targets marked `volatile=True` (coils, SG Ready contact emulation) are rewritten every tick. Any new actuator must keep this property.
 - Constraints in `schedule.py` must never make a slot less comfortable than the classification did (downgrade direction only).
 - Tests use fakes injected via `transport=`, `sender=` and `client_factory=`; never hit the network in tests.
 - `config.toml` is git-ignored because it contains the Tibber token; edit `config.example.toml` when adding options and keep it loadable (a test loads it).

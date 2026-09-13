@@ -103,12 +103,23 @@ host = "192.168.1.50"
 port = 502
 unit = 1
 timeout_seconds = 5
+# Write endurance: a register holding a *parameter* (a setpoint, a curve rise)
+# lives in the controller's non-volatile memory and survives a finite number of
+# write cycles. The backend already writes such a register only when the value
+# changes; this is a second, hard limit per address over a rolling 24 hours.
+# It is a safety net, not a tuning knob — if it trips, something is rewriting
+# the same parameter far too often.
+max_writes_per_day = 48
 [backend.modbus.writes]
-block  = [{ address = 100, value = 1, kind = "coil" }]
-reduce = [{ address = 100, value = 0, kind = "coil" }, { address = 30, value = -2 }]
-normal = [{ address = 100, value = 0, kind = "coil" }, { address = 30, value = 0 }]
-boost  = [{ address = 100, value = 0, kind = "coil" }, { address = 30, value = 2 }]
-force  = [{ address = 100, value = 0, kind = "coil" }, { address = 30, value = 3 }]
+# volatile = true marks a target that does NOT persist — a coil, or a register
+# that only emulates a contact (Stiebel/Tecalor SG Ready inputs 4001/4002).
+# Those are rewritten on every apply, so a device that rebooted is repaired.
+# Everything else is written only when the value actually changes.
+block  = [{ address = 100, value = 1, kind = "coil", volatile = true }]
+reduce = [{ address = 100, value = 0, kind = "coil", volatile = true }, { address = 30, value = -2 }]
+normal = [{ address = 100, value = 0, kind = "coil", volatile = true }, { address = 30, value = 0 }]
+boost  = [{ address = 100, value = 0, kind = "coil", volatile = true }, { address = 30, value = 2 }]
+force  = [{ address = 100, value = 0, kind = "coil", volatile = true }, { address = 30, value = 3 }]
 
 # --- MQTT: publish the mode to a topic --------------------------------------
 [backend.mqtt]

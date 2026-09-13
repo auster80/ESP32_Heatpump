@@ -275,55 +275,123 @@ against this very heat pump.
 
 1. **Heat pump model and interface.** A **Tecalor TTF 13 cool** (Stiebel
    Eltron rebrand) behind an **ISG plus** gateway, reachable at
-   **`192.168.0.121:502`, unit ID 254**. That is the "Stiebel Eltron /
-   Tecalor" row of the table in section 1, so **the emulator hardware is not
-   needed**: the curve can be shifted digitally. Relevant holding registers:
+   **`192.168.0.121:502`, unit ID 254** (Modbus TCP). Relevant holding
+   registers:
 
-   | Register | Meaning | Range |
-   |---|---|---|
-   | 1501 | HC 1 comfort temperature (`Komforttemperatur HK1`) | 5…30 °C |
-   | 1502 | HC 1 eco temperature (`ECO-Temperatur HK1`) | 5…30 °C |
-   | 1503 | HC 1 heating curve rise (`Steigung Heizkurve HK1`) | 0…3 |
-   | 1507 | Fixed value operation (`Festwertbetrieb`) | off / 20…70 °C |
-   | 1509 | DHW comfort setpoint | 10…60 °C |
-   | 1510 | DHW eco setpoint | 10…60 °C |
+   | Register | Meaning | Range | Persists? |
+   |---|---|---|---|
+   | 1501 | HC 1 comfort temperature (`Komforttemperatur HK1`) | 5…30 °C | parameter |
+   | 1502 | HC 1 eco temperature (`ECO-Temperatur HK1`) | 5…30 °C | parameter |
+   | 1503 | HC 1 heating curve rise (`Steigung Heizkurve HK1`) | 0…3 | parameter |
+   | 1507 | Fixed value operation (`Festwertbetrieb`) | off / 20…70 °C | parameter |
+   | 1509 | DHW comfort setpoint | 10…60 °C | parameter |
+   | 4000 | SG Ready on/off | 0/1 | parameter |
+   | 4001, 4002 | SG Ready inputs 1 and 2 | 0/1 | contact emulation |
+   | 5000 | SG Ready operating state (read-only) | 1…4 | — |
 
-   There is also a **native SG Ready interface over Modbus** — holding 4000
-   (on/off), 4001 and 4002 (the two inputs), with the resulting state on
-   input register 5000. The `sgready` backend's relay hardware is therefore
-   unnecessary too; the same four states can be written directly. See
-   section 6.1.
+   Section 1's table says a pump with this interface does not *need* the
+   emulator. That is true but not the whole argument — see section 6.2.
 
-2. **Sensor type and excitation voltage.** Moot — no emulator is being built.
-   If it is ever revisited, the sensor is the one on the ISG/WPM terminal
-   block, not inside the outdoor unit.
+2. **Sensor type and excitation voltage.** Still open, and still needed if the
+   emulator is built. Measure at the WPM/ISG terminal block, never at a sensor
+   inside the outdoor unit.
 
 3. **Indoor temperature.** The FEK room unit, already exposed to Home
-   Assistant as `sensor.tecalor_raumtemperatur_isttemperatur_fek`. The
-   outdoor temperature is input register 506.
+   Assistant as `sensor.tecalor_raumtemperatur_isttemperatur_fek`. The outdoor
+   temperature the pump currently sees is input register 506.
 
-4. **Coldest outdoor temperature to represent.** Still open. It only bounds
-   the planner's action set now that no resistor ladder has to cover it.
+4. **Coldest outdoor temperature to represent.** **−19 °C.** The house is in
+   **The Hague**, where the design outdoor temperature is nowhere near that;
+   −19 °C is deliberate headroom so the actuator never saturates at the bottom
+   of the range, and it is what a single resistor pot covers if the emulator is
+   built.
 
 5. **Power reading.** Daily compressor energy exists
-   (`sensor.tecalor_leistungsaufnahme_vd_heizen_tag` and
-   `..._warmwasser_tag`), which is enough to fit `PowerModel` from daily
-   totals but not for an instantaneous cost model. Whether an instantaneous
-   power register exists on this controller is unverified.
+   (`sensor.tecalor_leistungsaufnahme_vd_heizen_tag` and `..._warmwasser_tag`),
+   enough to fit `PowerModel` from daily totals but not for an instantaneous
+   cost model. Whether an instantaneous power register exists on this
+   controller is unverified.
 
-### 6.1 Consequence for the next step
+### 6.1 Write endurance: the constraint that shapes the design
 
-Two actuator paths are available without building anything, and both are
-already supported by the `modbus` backend:
+A holding register that holds a **parameter** — a setpoint, a curve rise — is
+not a variable in RAM. It is stored in the controller's non-volatile memory,
+which survives a finite number of write cycles. Controllers of this class
+typically quote something on the order of 10⁵ writes per cell; a cell that is
+rewritten past its rating stops holding its value, and on a heating controller
+that means a dead board, not a graceful degradation.
 
-- **SG Ready over Modbus** (holding 4000/4001/4002) for the coarse
-  `block`/`reduce`/`normal`/`boost`/`force` modes the scheduler produces.
-  This needs SG Ready enabled in the installer menu.
-- **Heating curve offset** (holding 1501/1502, optionally 1503) as the
-  fine-grained equivalent of the virtual outdoor sensor. `plan_curve()`
-  outputs a shift in kelvin; writing it as a comfort-temperature offset is
-  the same control problem with a different last hop.
+The arithmetic is unforgiving. This bridge's `reapply_minutes` defaults to 15
+and deliberately re-sends the current mode *even when it has not changed*,
+because a relay may have rebooted. Against a register that is:
 
-So the emulator hardware in sections 3 and 4 is **not on the critical path**
-for this house. What is: a `curve run` loop that applies the planned shift,
-and a decision on which of the two paths above carries space heating.
+| Write cadence | Per day | Per year | 10⁵ cycles reached in |
+|---|---|---|---|
+| every tick (60 s) | 1 440 | 525 600 | ~10 weeks |
+| every `reapply` (15 min) | 96 | 35 040 | ~3 years |
+| on change only (~6/day) | 6 | 2 190 | ~45 years |
+
+A naive `curve run` loop writing a heating-curve offset every price slot lands
+in the middle row and destroys the controller inside the warranty period of
+the *next* one.
+
+**What the documentation actually says.** The official Tecalor/Stiebel ISG
+Modbus manual (all 16 pages checked) documents function codes 06 and 16 for
+holding registers and carries only a generic *"Sachschaden — Unsachgemäßer
+Gebrauch kann zur Schädigung ... der Wärmepumpe führen"*. It gives **no**
+write-cycle rating, no minimum write interval, and no EEPROM warning. The
+frequently-quoted "max. 100 000 writes, otherwise the EEPROM may be
+permanently damaged" figure circulating in search results is from an
+**ebm-papst fan-electronics** Modbus guide, *not* from Stiebel Eltron — do not
+cite it as a Tecalor specification. The exact memory technology and endurance
+of the WPM board is therefore **unverified**; treat the limit as real and
+unknown rather than as a number you can budget against.
+
+**Consequences, already implemented in `backends/modbus.py`:**
+
+- A non-volatile register is written **only when the value changes**. Repeated
+  `apply()` of the same mode costs nothing.
+- `volatile = true` marks targets that do *not* persist — coils, and the SG
+  Ready input registers 4001/4002, which emulate contacts. Those are rewritten
+  every tick so a rebooted device is repaired.
+- `max_writes_per_day` is a hard per-address budget over a rolling 24 hours.
+  When it is spent the write is refused and logged; the heat pump simply keeps
+  its current setting, which is the safe direction.
+- SG Ready (4000/4001/4002) is the preferred Modbus actuator over setpoint
+  registers, because state 1–4 is a contact emulation rather than a stored
+  parameter. **This is inference from what the registers represent, not a
+  documented guarantee** — verify before relying on it, for example by writing
+  4001 a few thousand times on a bench unit, or by asking Stiebel support.
+
+### 6.2 Why the emulator is still the better design
+
+The earlier reading of section 1 — "this pump has Modbus, so the hardware is
+unnecessary" — misses the point of the sensor trick. The emulator is not a
+workaround for a missing interface. It is a way to put the controller under
+**external authority**:
+
+- **It writes nothing.** A manipulated resistance costs zero write cycles. The
+  constraint in section 6.1 disappears entirely instead of being managed.
+- **It overrides rather than asks.** Writing 1501 negotiates with the Tecalor
+  controller's own logic, which keeps its hysteresis, its blocking times, its
+  own idea of what the curve means, and may clamp or ignore what you write.
+  Feeding the curve a different outdoor temperature changes the input the
+  controller reasons from, so its whole logic moves with you.
+- **It is firmware- and vendor-independent.** It survives an ISG firmware
+  change, a register renumbering, or replacing the pump with another brand.
+- **It degrades safely.** Behind a fail-safe bypass relay, losing power or
+  losing the controller returns the real sensor and the house heats normally.
+
+The Modbus path is the faster one to a working system and needs no hardware;
+the emulator is the one that actually delivers the Ngenic-style external
+control this document set out to build. They are not exclusive — section 5.4
+already suggests running both, and SG Ready over Modbus is a good coarse
+actuator precisely because it is not a stored parameter.
+
+### 6.3 Next step
+
+1. Confirm SG Ready is enabled in the installer menu (register 4000).
+2. Build the `curve run` loop against the **Modbus** path first, with the write
+   guard on, to validate `plan_curve()` against the real house.
+3. Answer question 2 (sensor type and excitation) and build the emulator once
+   the control logic is proven, moving the last hop off Modbus entirely.
