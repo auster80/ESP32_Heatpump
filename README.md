@@ -260,9 +260,9 @@ Set `TIBBER_API_URL` to point the client at a local mock server; `tools/fake_tib
 
 ## Status and where to continue
 
-Pull request: <https://github.com/auster80/Claude_Code_Default/pull/1>.
-Branch `claude/nibe-s-tibber-interface-a3dlzg`; `main` carries the same
-commits.
+Development happens on `main` in
+<https://github.com/auster80/ESP32_Heatpump>. The project started in the
+`Claude_Code_Default` scratch repository and was moved here with its history.
 
 - `docs/tibber-integrations.md` — which Tibber integrations could carry a
   bridge (Homey, Futurehome, Ngenic) and which cannot (vendor clouds).

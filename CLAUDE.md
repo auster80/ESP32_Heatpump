@@ -4,22 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This repository holds two independent pieces:
-
-1. `check-updates.sh`, a shell utility that checks whether the installed Claude Code is up to date against npm.
-2. `tibber_heatpump_bridge/`, a Python package that drives a heat pump from Tibber spot prices (see README.md).
-
-## check-updates.sh
-
-```bash
-./check-updates.sh
-```
-
-Exit codes: `0` = update available, `1` = up to date, `2` = error.
-
-Dependencies: the `claude` CLI (installed version) and either `npm` or `curl` (latest version from the npm registry).
-
-Single self-contained Bash script with three functions: `get_installed_version` parses `claude --version`, `get_latest_version` queries the npm registry (prefers `npm view`, falls back to `curl`), `main` compares and reports.
+`tibber_heatpump_bridge/` is a Python package that drives a heat pump from
+Tibber spot prices (see README.md), plus an ESPHome sketch under `firmware/`
+for the planned virtual-outdoor-sensor hardware.
 
 ## tibber-heatpump-bridge
 
