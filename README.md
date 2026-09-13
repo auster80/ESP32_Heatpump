@@ -284,6 +284,8 @@ Development happens on `main` in
   and the bridge must not drive the same contacts alongside it.
 - `docs/tibber-integrations.md` — which Tibber integrations could carry a
   bridge (Homey, Futurehome, Ngenic) and which cannot (vendor clouds).
+- `docs/ordering.md` — the parts list for one build of the emulator, with the
+  two decisions to make before ordering and the one thing not to get wrong.
 - `docs/virtual-outdoor-sensor.md` — design of the Ngenic-style sensor
   emulator and its control logic. Section 6 records the target installation (a
   Tecalor TTF 13 cool behind an ISG plus gateway, −19 °C design floor, The
