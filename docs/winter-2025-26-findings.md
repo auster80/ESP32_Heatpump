@@ -14,9 +14,11 @@ system is hot-water-only and was off for space heating, the time-shift prize is
 
 | Quantity | Value |
 |---|---|
-| Heating electricity, winter | **~1000 kWh** (6.7 kWh/day) |
-| Heat delivered | 5 508 kWh |
-| **Seasonal COP** | **5.56** — this is a ground-source (brine) machine |
+| Space-heating electricity, winter | **940 kWh** (measured, not estimated) |
+| Space-heating heat delivered | 5 520 kWh — **COP 5.87** |
+| Hot-water electricity, winter | **650 kWh** — COP 3.48 |
+| Compressor electricity, total | **1 590 kWh** |
+| Electric backup (NHZ) | **0 hours** — never ran |
 | Mean all-in price | 0.257 €/kWh |
 | Winter heating cost | **~€260** |
 | Price spread, p10→p90 (last winter) | 0.096 €/kWh — but see below |
@@ -24,8 +26,11 @@ system is hot-water-only and was off for space heating, the time-shift prize is
 | Time-shift saving, last winter's prices | €37 / winter |
 | **Time-shift saving, recent spreads** | **€90–130 / winter** |
 
-The COP of 5.56 keeps the absolute cost low: a brine heat pump turns €260 of
-electricity into a warm house. But the saving is set by the price **spread**,
+These are read from the lifetime `VD HEIZEN`/`VD WARMWASSER` energy counters
+(MWh), differenced across the exact window — not summed from a lossy daily
+sensor, and cross-checked: the NHZ resistance backup logged zero run-time, so
+940 + 650 kWh is the whole machine. Space heating alone costs about **€240** at
+last winter's mean; the COP of 5.87 keeps the absolute cost low. But the saving is set by the price **spread**,
 not the level, and here the first pass was misled by its own window. **Last
 winter was an unusually flat-price period** — Nov–Feb intraday spread averaged
 0.06 €/kWh. From March onward it roughly tripled to ~0.17 €/kWh, and it has
@@ -40,7 +45,7 @@ stayed there through summer 2026 as the mean price rose ~9 %:
 | 2026-08 | 0.287 | 0.185 |
 | 2026-09 | 0.336 | 0.168 |
 
-Recompute the prize on the same 1000 kWh of heating, shifting into the cheapest
+Recompute the prize on the same 940 kWh of heating, shifting into the cheapest
 quarter of each day:
 
 - **at last winter's flat prices: €37 / winter**
@@ -97,9 +102,13 @@ temperature.
    is a real project again, not only a hobby. The caveat is spread risk: if the
    coming winter reverts to last winter's flatness the payback stretches to two
    or three winters.
-4. **If any automated shifting is extended, put it on DHW, not space heat.**
-   The tank is a discrete, larger thermal batch with a bigger temperature lift,
-   so it shifts more energy per decision — and it is already on SG Ready.
+4. **Hot water is the better-value shifting target, and the measurement says
+   so.** DHW drew 650 kWh at COP 3.48 — 41 % of the compressor electricity, at
+   a COP well below heating's 5.87, so each shifted kWh of *input* saves more
+   than a heating kWh does. It is a discrete, well-insulated batch with a big
+   lift, and it is already the load SG Ready controls. Extending price-aware
+   control here is worth more per unit effort than the space-heating emulator,
+   though the two are independent and both can run.
 
 ## Caveats
 
