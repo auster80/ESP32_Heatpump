@@ -115,11 +115,11 @@ and the price percentile. Each question below decides something specific.
    heizen` over daily `Leistungsaufnahme VD heizen` gives a daily COP; regress
    it against average outdoor temperature and against the resulting curve
    setpoint. *Decides whether `PowerModel` needs a non-linear term.*
-6. **How large is the prize?** Distribute last winter's compressor energy over
-   the price series and compute what the same energy would have cost if shifted
-   into the cheapest windows subject to the comfort band. *Decides whether any
-   of this is worth building.* Do this one first — it is a pure data question
-   and needs no model.
+6. ~~How large is the prize?~~ **Answered: small — €20–30/winter.** See
+   `winter-2025-26-findings.md`. COP 5.56 and a narrow spot spread make the
+   time-shift saving marginal, cycling is already fine, and the house's real
+   inefficiency is overheating (44 % of winter above 22 °C), which a free curve
+   cut addresses better than the emulator. This reframes the whole project.
 7. **What is `RESTSTILLSTAND` set to, and `GEBÄUDEDÄMPFUNG`, and `K`?** Read
    from the WPM menu rather than the data.
 

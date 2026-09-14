@@ -284,6 +284,9 @@ Development happens on `main` in
   and the bridge must not drive the same contacts alongside it.
 - `docs/tibber-integrations.md` — which Tibber integrations could carry a
   bridge (Homey, Futurehome, Ngenic) and which cannot (vendor clouds).
+- `docs/winter-2025-26-findings.md` — **read first**: last winter's data says
+  the time-shift prize is €20–30/winter, cycling is already fine, and the house
+  runs warm; the emulator is a hobby build, not an investment.
 - `docs/control-design.md` — what the WPM3i actually controls, why planning in
   blocks makes cost and compressor life agree rather than compete, and the
   questions last winter's data has to answer first.
