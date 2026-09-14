@@ -431,3 +431,62 @@ __all__ = [
     "rollout",
     "shift_runs",
 ]
+
+
+@dataclass(frozen=True)
+class CyclingModel:
+    """Compressor starts per hour for an on/off heat pump behind a buffer tank.
+
+    The WPM runs the buffer on its return sensor with a hysteresis band, so the
+    compressor fills the buffer at full output and then waits while the house
+    draws it down. With ``capacity_kw`` of output, ``buffer_kwh`` of usable
+    storage between the switching points and a house demand of ``demand_kw``:
+
+        on  = buffer_kwh / (capacity_kw - demand_kw)
+        off = buffer_kwh / demand_kw
+        starts/h = 1 / (on + off) = demand*(capacity-demand) / (buffer*capacity)
+
+    The consequence that matters for planning: **cycling is worst at half
+    load**, peaking at ``capacity / (4 * buffer)``, and falls to zero at both
+    ends. A controller that pushes the pump towards either off or near-capacity
+    therefore *reduces* starts, which is the same thing price-blocking wants.
+    Cost and compressor wear are not in tension here as long as the plan is
+    built from long blocks rather than per-slot wiggles.
+
+    ``min_off_minutes`` is the WPM's own standstill timer (``RESTSTILLSTAND``),
+    which caps the rate no matter what the demand is.
+    """
+
+    capacity_kw: float = 6.0
+    buffer_kwh: float = 0.5
+    min_off_minutes: float = 20.0
+
+    def validate(self) -> None:
+        if self.capacity_kw <= 0:
+            raise ValueError("capacity_kw must be positive")
+        if self.buffer_kwh <= 0:
+            raise ValueError("buffer_kwh must be positive")
+        if self.min_off_minutes < 0:
+            raise ValueError("min_off_minutes must not be negative")
+
+    def starts_per_hour(self, demand_kw: float) -> float:
+        if demand_kw <= 0.0 or demand_kw >= self.capacity_kw:
+            return 0.0
+        on_h = self.buffer_kwh / (self.capacity_kw - demand_kw)
+        off_h = max(self.buffer_kwh / demand_kw, self.min_off_minutes / 60.0)
+        return 1.0 / (on_h + off_h)
+
+    @property
+    def worst_demand_kw(self) -> float:
+        """Demand at which the pump cycles hardest."""
+        return self.capacity_kw / 2.0
+
+    @property
+    def worst_starts_per_hour(self) -> float:
+        return self.starts_per_hour(self.worst_demand_kw)
+
+    def duty(self, demand_kw: float) -> float:
+        """Fraction of the time the compressor runs."""
+        if demand_kw <= 0.0:
+            return 0.0
+        return min(1.0, demand_kw / self.capacity_kw)

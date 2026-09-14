@@ -284,6 +284,9 @@ Development happens on `main` in
   and the bridge must not drive the same contacts alongside it.
 - `docs/tibber-integrations.md` — which Tibber integrations could carry a
   bridge (Homey, Futurehome, Ngenic) and which cannot (vendor clouds).
+- `docs/control-design.md` — what the WPM3i actually controls, why planning in
+  blocks makes cost and compressor life agree rather than compete, and the
+  questions last winter's data has to answer first.
 - `docs/ordering.md` — the parts list for one build of the emulator, with the
   two decisions to make before ordering and the one thing not to get wrong.
 - `docs/virtual-outdoor-sensor.md` — design of the Ngenic-style sensor

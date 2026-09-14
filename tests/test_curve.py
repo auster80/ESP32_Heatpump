@@ -5,6 +5,7 @@ from datetime import timedelta
 
 from tibber_heatpump_bridge.curve import (
     CurveSettings,
+    CyclingModel,
     HouseModel,
     PowerModel,
     merge_slots,
@@ -179,3 +180,55 @@ class HelperTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CyclingModelTests(unittest.TestCase):
+    def _model(self) -> CyclingModel:
+        return CyclingModel(capacity_kw=6.0, buffer_kwh=0.5, min_off_minutes=20.0)
+
+    def test_no_cycling_at_the_extremes(self):
+        m = self._model()
+        self.assertEqual(m.starts_per_hour(0.0), 0.0)
+        self.assertEqual(m.starts_per_hour(6.0), 0.0)
+        self.assertEqual(m.starts_per_hour(9.9), 0.0)
+
+    def test_cycling_peaks_at_partial_load(self):
+        """The result the planner leans on: pushing the pump towards off or
+        towards capacity reduces starts. Cost and wear are not in tension."""
+        m = self._model()
+        peak = max(m.starts_per_hour(d / 10) for d in range(1, 60))
+        self.assertGreater(peak, m.starts_per_hour(0.3))
+        self.assertGreater(peak, m.starts_per_hour(5.5))
+
+    def test_blocking_beats_flat_operation_for_the_same_energy(self):
+        """24 kWh/day delivered in blocks costs far fewer starts than flat."""
+        m = self._model()
+        flat = m.starts_per_hour(1.0) * 24
+        blocked = m.starts_per_hour(4.0) * 6
+        self.assertLess(blocked, flat / 3)
+
+    def test_a_bigger_buffer_cycles_less(self):
+        small = CyclingModel(capacity_kw=6.0, buffer_kwh=0.25)
+        large = CyclingModel(capacity_kw=6.0, buffer_kwh=2.0)
+        self.assertGreater(small.starts_per_hour(3.0), large.starts_per_hour(3.0))
+
+    def test_min_off_timer_binds_where_the_natural_off_period_is_short(self):
+        """RESTSTILLSTAND clips cycling at moderate demand, where the buffer
+        drains quickly, and does nothing at low demand where the off period is
+        already long."""
+        without = CyclingModel(capacity_kw=6.0, buffer_kwh=0.5, min_off_minutes=0.0)
+        with_timer = CyclingModel(capacity_kw=6.0, buffer_kwh=0.5, min_off_minutes=30.0)
+        # 2 kW: natural off period is 15 min, so a 30 min timer halves the rate
+        self.assertLess(with_timer.starts_per_hour(2.0), without.starts_per_hour(2.0))
+        # 0.5 kW: natural off period is already 60 min, timer is irrelevant
+        self.assertAlmostEqual(with_timer.starts_per_hour(0.5), without.starts_per_hour(0.5), places=9)
+
+    def test_duty_and_validation(self):
+        m = self._model()
+        self.assertAlmostEqual(m.duty(3.0), 0.5)
+        self.assertAlmostEqual(m.duty(9.0), 1.0)
+        m.validate()
+        with self.assertRaises(ValueError):
+            CyclingModel(capacity_kw=0.0).validate()
+        with self.assertRaises(ValueError):
+            CyclingModel(buffer_kwh=-1.0).validate()
