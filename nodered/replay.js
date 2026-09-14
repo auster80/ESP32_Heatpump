@@ -17,7 +17,7 @@ const [priceFile, drawFile, label, mode] = process.argv.slice(2);
 const price = load(priceFile), draws = loadDraws(drawFile);
 const OLD = mode === '--old';
 
-const STANDING_LOSS = 0.15, REHEAT = 4.5;      // K/h, both measured
+const STANDING_LOSS = 0.15, REHEAT = +(process.env.REHEAT||14.4);  // K/h, measured
 const ECO = 40, COMFORT = 55, ORDERED = 60;
 // window must be long enough to actually complete the fill:
 // evening 40->60 = 20 K at 4.5 K/h = 4.4 h ; morning 40->55 = 15 K = 3.3 h
@@ -57,7 +57,7 @@ function oldBands(t){
 }
 
 let T = 50, cost=0, kwh=0, belowFloor=0, steps=0, cmdPrices=[], blockedSteps=0;
-const V_KWH_PER_K = 0.35;   // ~300 L tank; scales all kWh figures linearly, not the price result
+const V_KWH_PER_K = 0.62;   // 8.9 kW / 14.4 K/h -> ~530 L effective (TSBC Integralspeicher)
 let di=0, planDay=null, planM=null, planE=null;
 const start=price[0].t, end=price[price.length-1].t;
 for(let t=new Date(start); t<end; t=new Date(t.getTime()+15*60000)){

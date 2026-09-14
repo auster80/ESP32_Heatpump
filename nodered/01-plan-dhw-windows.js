@@ -15,14 +15,14 @@
 //         msg.payload    = the same plan (for debug / storing in HA)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Window length must be long enough for the fill to COMPLETE, or the tank never
-// reaches target and runs lean. At the measured 4.5 K/h reheat rate:
-//   evening  40 -> 60 C = 20 K = 4.4 h   -> 285 min with margin
-//   morning  40 -> 55 C = 15 K = 3.3 h   -> 210 min with margin
-// The old code used 150 min (2.5 h) for both, which cannot fill the tank; in
-// closed-loop replay that alone made the new logic WORSE than the old bands.
-const FILL_MIN_EVENING  = 285;
-const FILL_MIN_MORNING  = 210;
+// 2.5 h, unchanged from the original — and it is the right value.
+// Measured reheat is 14.4 K/h median (8.9 kW thermal into a ~530 L effective
+// store), so a full 40 -> 60 C fill of 20 K completes in about 85 minutes and
+// fits comfortably. Lengthening the window is actively harmful: it drags the
+// fill across more hours and therefore pricier ones. Closed-loop replay at the
+// correct reheat rate: 150 min gives 25 % vs flat in March, 285 min only 21 %.
+const FILL_MIN_EVENING  = 150;
+const FILL_MIN_MORNING  = 150;
 const MORNING_DEADLINE  = { h: 6,  m: 30 };  // tank must be full before the morning draw
 const EVENING_DEADLINE  = { h: 17, m: 0  };  // evening draws observed 17:00–22:00
 const MAX_LOOKBACK_H    = 18;   // don't fill more than this far ahead of a deadline
