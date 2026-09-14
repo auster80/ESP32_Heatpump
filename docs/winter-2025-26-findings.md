@@ -1,10 +1,16 @@
-# What last winter's data says
+# What the data says
 
 Analysis of the Home Assistant InfluxDB (`Homeassistant` bucket), 1 Nov 2025 –
-31 Mar 2026. This is the reality check the control design (§4) asked for, and
-it changes the recommendation. **Read this before building anything.**
+Sep 2026. The reality check the control design (§4) asked for.
 
-## Headline: the prize is small
+**A correction to an earlier draft of this file:** the first pass quoted a
+€20–30/winter prize and called the emulator a hobby build. That number came
+from analysing last winter's prices, which were an unusually *flat* window. Once
+the price trend since March is included, and once it is clear the SG Ready
+system is hot-water-only and was off for space heating, the time-shift prize is
+2–4× larger and fully uncaptured. The corrected verdict is below.
+
+## Headline: the prize is modest but real
 
 | Quantity | Value |
 |---|---|
@@ -13,15 +19,38 @@ it changes the recommendation. **Read this before building anything.**
 | **Seasonal COP** | **5.56** — this is a ground-source (brine) machine |
 | Mean all-in price | 0.257 €/kWh |
 | Winter heating cost | **~€260** |
-| Price spread, p10→p90 | **0.096 €/kWh** — narrow |
-| Realistic time-shift saving | **€20–30 / winter** |
+| Price spread, p10→p90 (last winter) | 0.096 €/kWh — but see below |
+| Price spread, p10→p90 (recent months) | **0.17 €/kWh — ~3× wider** |
+| Time-shift saving, last winter's prices | €37 / winter |
+| **Time-shift saving, recent spreads** | **€90–130 / winter** |
 
-The COP of 5.56 is the root of it: a brine heat pump turns €260 of electricity
-into a warm house, so even a large *fraction* saved is a small *number*. And
-the Dutch all-in price is mostly tax and network charge — the movable spot
-component is a thin slice, so the day's p10→p90 spread is only ~0.10 €/kWh.
-Shift every kilowatt-hour of heating into the cheapest quarter of the day and
-the bill falls ~12–15 % of the heating portion — €20–30 over a winter.
+The COP of 5.56 keeps the absolute cost low: a brine heat pump turns €260 of
+electricity into a warm house. But the saving is set by the price **spread**,
+not the level, and here the first pass was misled by its own window. **Last
+winter was an unusually flat-price period** — Nov–Feb intraday spread averaged
+0.06 €/kWh. From March onward it roughly tripled to ~0.17 €/kWh, and it has
+stayed there through summer 2026 as the mean price rose ~9 %:
+
+| Month | Mean €/kWh | Mean intraday spread |
+|---|---|---|
+| 2025-11 | 0.261 | 0.072 |
+| 2025-12 | 0.254 | 0.054 |
+| 2026-02 | 0.242 | 0.057 |
+| 2026-04 | 0.238 | 0.172 |
+| 2026-08 | 0.287 | 0.185 |
+| 2026-09 | 0.336 | 0.168 |
+
+Recompute the prize on the same 1000 kWh of heating, shifting into the cheapest
+quarter of each day:
+
+- **at last winter's flat prices: €37 / winter**
+- **at recent wide spreads: €98 / winter** (34 % off the heating portion)
+- a colder winter at higher prices (1300 kWh): **~€128 / winter**
+
+Whether the coming winter looks flat or wide is the real uncertainty. Wider
+spreads are the structural trend (solar build-out, more volatility), and winter
+keeps the evening-peak-versus-overnight-trough swing even without midday solar,
+so €60–100 is the honest central estimate rather than the €20–30 first quoted.
 
 ## Two things that are already fine
 
@@ -30,10 +59,12 @@ only 8 % of runs under 10 min. The buffer is doing its job; `CyclingModel`'s
 worry about half-load short-cycling does not bite at this install. There is no
 cycling problem to solve.
 
-**Heating already leans cheap.** Compressor starts fire at an average price
-percentile of 45 (50 would be random) and peak at 02:00, the cheapest hours.
-The existing Node-RED SG Ready control is already capturing part of the €20–30,
-so the *incremental* prize from the emulator is smaller still.
+**Nothing is capturing the prize today.** Compressor starts peak at 02:00 and
+fire at an average price percentile of 45 — but that is just where overnight
+heat demand falls, not price control. The SG Ready system is **hot-water only
+and was not active last winter**, so space heating ran on the pure
+weather-compensated curve with no price awareness at all. The whole time-shift
+prize is therefore uncaptured and on the table, not an incremental slice.
 
 ## The real finding: the house runs warm
 
@@ -47,8 +78,11 @@ The house spends nearly half the winter above 22 °C and almost never gets cold.
 That overheating is the largest inefficiency in the data, and it is **free** to
 fix: lower the heating curve slope or the comfort setpoint by ~1 K. Each 1 K of
 average indoor temperature is roughly 6–8 % of heat demand, so this is worth
-more than the time-shifting the emulator was for — at zero hardware cost, and it
-makes the house *more* comfortable, not less.
+roughly €18/winter — free, and it makes the house *more* comfortable, not less.
+At last winter's flat prices this rivalled the time-shift prize; at today's
+wider spreads the time-shift is the larger of the two. **They are independent
+and additive** — do both, and a lower curve also lifts COP by dropping flow
+temperature.
 
 ## Recommendation
 
@@ -57,10 +91,12 @@ makes the house *more* comfortable, not less.
    free, reversible from the FEK.
 2. **Keep the existing SG Ready DHW + heating control.** It works and already
    shifts toward cheap hours.
-3. **Treat the outdoor-sensor emulator as a hobby build, not an investment.**
-   Its incremental saving over what the SG Ready control already does is a few
-   euros a winter against ~€55 of parts and the build effort. Worth doing for
-   the interest and the learning; not worth doing to save money.
+3. **The emulator now earns its keep.** With the space-heating prize fully
+   uncaptured and spreads ~3× last winter's, €60–100/winter against ~€55 of
+   parts is roughly a one-winter payback — plus the interest of the build. This
+   is a real project again, not only a hobby. The caveat is spread risk: if the
+   coming winter reverts to last winter's flatness the payback stretches to two
+   or three winters.
 4. **If any automated shifting is extended, put it on DHW, not space heat.**
    The tank is a discrete, larger thermal batch with a bigger temperature lift,
    so it shifts more energy per decision — and it is already on SG Ready.
