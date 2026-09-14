@@ -162,6 +162,71 @@ breach it, and there is no headroom left above. And the *opportunistic* 37 % are
 not fixed by this at all; they need the price test, since the tank was already
 warm when those raises fired.
 
+### Out-of-sample test: March 2026
+
+The analysis above is built on Aug–Sep, a solar-shaped month. Re-running it
+unchanged on **March 2026** both validates the core mechanism and falsifies two
+of the conclusions.
+
+**March is the uncontrolled baseline.** The DHW setpoint sat constant at 55.0 °C
+all month and SG Ready never left Comfort — the price control was not running.
+That makes March a clean control group.
+
+**1. The price shape is the same in both seasons — the bands are wrong all year.**
+
+| | Cheapest hours | Most expensive |
+|---|---|---|
+| August | 09–13 (0.19) | 17–20 (0.39) |
+| **March** | **10–13 (0.180)** | **16–19 (0.323)** |
+
+Midday is cheapest in March too. The "morning" band confined to 18:00→06:30 is
+wrong in *winter* as well, not just summer — which strengthens the case for
+dropping the fixed bands rather than seasonally re-tuning them.
+
+**2. CORRECTION — the control is slightly better than nothing, not worse.**
+
+| | Mean price paid for DHW | vs flat day |
+|---|---|---|
+| March, **control off** | 0.268 (flat 0.255) | **−5 %** |
+| Aug–Sep, **control on** | 0.302 (flat 0.299) | **−1 %** |
+
+An earlier draft called the control "worse than random" and said it "saves
+nothing". Against the true uncontrolled baseline it gains about **4 percentage
+points** — real, but a small fraction of the ~34 % available. The verdict
+changes from *harmful* to *barely working*.
+
+The baseline also confirms the shower theory independently: the single busiest
+DHW hour in uncontrolled March is **18:00, with 14 of 79 episodes** — the pump
+reheating straight after the evening draw, at the 0.323 €/kWh peak, with nothing
+telling it to wait.
+
+**3. CORRECTION — filling to 60 °C does not cover every draw.**
+
+| Fill to… | August: draws hitting the floor | **March** |
+|---|---|---|
+| 55 °C | 3 of 11 (27 %) | 2 of 19 (11 %) |
+| 58 °C | 1 of 11 (9 %) | 2 of 19 (11 %) |
+| 60 °C | **0 of 11 (0 %)** | **2 of 19 (11 %)** |
+
+March's evening draws have a much heavier tail — worst **23.8 K**, p90 **21.4 K**,
+against August's 18.6 / 15.8. Two of nineteen exceed the full 60→40 band of
+20 K, so **no fill level can cover them**; they will force a reheat whatever is
+done. The claim "filling to 60 eliminates every demand-driven trigger" holds for
+August and **not** in general.
+
+**What actually generalises.** In March the tank entered the evening at
+**54.1 °C** and only 11 % of draws breached. In August, with the control running,
+it entered at **49.8 °C** and 27 % breached. The control was *drifting the tank
+down* and then being caught by ordinary draws. The durable fix is therefore not
+a higher setpoint per se but **guaranteeing a full tank going into the evening,
+topped up in the midday trough** — which both seasons price identically.
+
+Using **Ordered (SG Ready state 4) for that pre-evening fill gives 60 °C with no
+register change at all**, leaving Komfort at 55 for routine use. That is the
+right lever, and it covers everything except the ~11 % of oversized draws, for
+which the best available action is to defer the reheat to the least-bad price
+rather than prevent it.
+
 ### The fix — pure software, four changes
 
 1. **Drop the fixed search bands.** Search the whole horizon from now to the
@@ -177,16 +242,17 @@ warm when those raises fired.
 3. **Make reheat deadline-aware.** After a draw, do not reheat immediately
    unless the tank is below the floor. Wait for the cheapest hour before the
    next expected draw.
-4. **Raise the Comfort fill target, keep the ECO floor low.** This is the
-   setpoint optimisation. The ECO floor of 40 °C is doing its job and should
-   stay low — it is what keeps the pump passive. But filling only to **55 °C**
-   wastes the tank's capacity. Going to **60 °C** (register 1509: 550 → 600)
-   widens the usable band from 15 K to 20 K, **a third more energy stored per
-   cheap cycle**, and at 0.15 K/h that buys roughly 33 extra hours of coast.
-   Fewer fills are then needed, and every one of them can be placed in a cheap
-   hour. Check the mixing valve is set correctly first — 60 °C at the tap
-   scalds — and note COP falls slightly at the higher lift, which the wider
-   price spread more than pays for.
+4. **Use Ordered (state 4, 60 °C) for one pre-evening fill; leave the setpoints
+   alone.** This is the setpoint answer, and it needs no register change: SG
+   Ready state 4 already commands 60 °C. Keep Komfort at 55 for routine use and
+   the ECO floor at 40 — that low floor is what keeps the pump passive. Fire
+   Ordered once in the midday trough (cheapest in both March and August) so the
+   tank enters the evening full. This is what the out-of-sample test showed
+   matters: March's uncontrolled tank started the evening at 54.1 °C and
+   breached 11 % of the time, while August's controlled tank started at 49.8 °C
+   and breached 27 %. Check the mixing valve is set for 60 °C at the tap, and
+   accept that ~11 % of draws are simply larger than the tank — those can only
+   be deferred to a less bad price, not prevented.
 
 On 650 kWh/winter at ~0.30 €/kWh, DHW costs about **€195/winter**. Moving the
 mean paid price from 0.302 toward ~0.22 — conservative against the 0.191
