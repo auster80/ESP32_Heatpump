@@ -284,6 +284,8 @@ Development happens on `main` in
   and the bridge must not drive the same contacts alongside it.
 - `docs/tibber-integrations.md` — which Tibber integrations could carry a
   bridge (Homey, Futurehome, Ngenic) and which cannot (vendor clouds).
+- `docs/recommendations.md` — **start here**: what to change and in what order,
+  and why hot water beats the emulator by 3x.
 - `docs/sg-ready-and-curve.md` — the live curve settings, a concrete 1 K curve
   cut, and the finding that the SG Ready DHW control saves ~0 % (its fixed
   windows land on price peaks) — a software fix worth more than the emulator.
