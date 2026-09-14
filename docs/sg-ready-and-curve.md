@@ -162,6 +162,82 @@ breach it, and there is no headroom left above. And the *opportunistic* 37 % are
 not fixed by this at all; they need the price test, since the tank was already
 warm when those raises fired.
 
+### When the control was actually running
+
+Mapping the DHW setpoint across the whole record (a setpoint that moves means
+the control is driving it; a constant one means it is not):
+
+| Period | Setpoints seen | Relay events | Status |
+|---|---|---|---|
+| Nov 2025 | 10 / 40 / 55 / 60 | 201 | **active** |
+| Dec 2025 | 10 / 40 / 55 / 60 | 163 | **active** |
+| Jan 2026 | 10 / 40 / 55 / 60 | 72 | active, fading |
+| Feb 2026 | 10 / 40 / 55 | 19 | barely |
+| Mar 2026 | 55 only | 15 | **off** |
+| Apr 2026 | 40 / 55 | 21 | partial |
+| May–Jul 2026 | 40 only | 0 | **off** (tank left at the ECO floor all summer) |
+| Aug 2026 | 10 / 40 / 55 | 37 | **active** |
+| Sep 2026 | 10 / 40 / 55 / 60 | 61 | **active** |
+
+So the control did run through last winter for hot water — it is only *space*
+heating it never touched. It then decayed through January and February, stopped
+entirely for March through July, and was restarted in August.
+
+### The control's best period: Nov–Dec 2025
+
+This is the proper test — the heating season with the control at full activity
+(232 setpoint raises, 151 DHW episodes) — and it **overturns two earlier
+conclusions**.
+
+**The winter price shape is different, and the bands were right for it.**
+
+| | Cheapest hours | Dearest |
+|---|---|---|
+| **Nov–Dec 2025** | **01–04 (0.230)** | 15–18 (0.289) |
+| March 2026 | 10–13 (0.180) | 16–19 (0.323) |
+| August 2026 | 09–13 (0.19) | 17–20 (0.39) |
+
+In deep winter the cheap hours really are **overnight**, so the hard-coded
+18:00→06:30 morning band targets them correctly. The band design is not wrong in
+principle — it is **static while the price shape rotates seasonally**, from
+overnight-cheap in Nov–Dec to midday-cheap by March and right through summer. An
+earlier claim here that "midday is cheapest in both seasons" was drawn from
+March and August and does not hold for Nov–Dec.
+
+**And the control does save money when it runs in its intended season:**
+
+| Nov–Dec 2025 | |
+|---|---|
+| DHW mean price paid | **0.251 €/kWh** |
+| Flat-day average | 0.257 €/kWh |
+| **vs flat** | **+3 % — genuinely better** |
+| Headroom to the cheapest 4 h | **only 8 %** |
+
+That is the opposite sign from the August result, and it comes with a sting:
+**the winter headroom is small because the winter spread is narrow.** Nov–Dec
+2025 spanned only 0.230→0.289 between the cheapest and dearest four hours. The
+0.17–0.18 spreads that made the prize look large are a **March-onward
+phenomenon**, not a winter one.
+
+On 650 kWh of DHW at 0.257, an 8 % headroom is roughly **€13/winter**, not the
+~€50 estimated from August data. The larger DHW prize only materialises if
+winter spreads widen to resemble 2026's later months.
+
+**Evening draws are worse in deep winter**, and the fill fix helps but does not
+solve:
+
+| Nov–Dec 2025, 46 evening draws | |
+|---|---|
+| Mean start | 48.5 °C |
+| Mean drop | 11.6 K |
+| **Worst** | **34.4 K** |
+| Hit the 40 °C floor filling to 55 °C | 14 of 46 (30 %) |
+| Hit the floor filling to **60 °C** | **6 of 46 (13 %)** |
+
+Filling to 60 °C halves the breaches rather than eliminating them. Across all
+three periods the Ordered-state fill is consistently worth doing and never
+sufficient on its own.
+
 ### Out-of-sample test: March 2026
 
 The analysis above is built on Aug–Sep, a solar-shaped month. Re-running it
