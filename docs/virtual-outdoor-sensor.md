@@ -349,6 +349,25 @@ rheostat approaches its wiper resistance and would short the sensor — a
   controller drops the relay and the real AFS 2 returns.
 - The watchdog must be **hardware**. A timer inside the same firmware that
   might hang is not a watchdog.
+- **What the barrier is for, and what it is not.** Both sides of it are already
+  SELV: the ESP32 side sits behind the Class II supply's mains isolation, and
+  the pump side behind the WPM's own. This barrier is therefore **functional**
+  isolation — it breaks a ground loop and keeps ESP32 switching current out of
+  the measurement reference. It is *not* protective separation and must never
+  be relied on as such; if mains ever reaches the WPM's SELV rail, that unit's
+  own safety isolation has already failed. A **1 kV** isolated converter is
+  ample for this job, and chasing a higher figure buys nothing. Note only that
+  the barrier is as strong as its weakest element: 6N137 optocouplers are
+  typically 2.5 kV, so a 1 kV converter sets the number.
+- **An unregulated isolated converter needs a minimum load.** This is easy to
+  miss because the rheostat section draws almost nothing — a milliamp or two.
+  Unregulated SIP converters (B0505S-1W, REE-0505S and the like) specify load
+  regulation only down to about 10 % of rated load; below that the output
+  climbs well above nominal, and 5 V becoming 6 V puts the digipot past its
+  5.5 V supply maximum. Fit a **~270 Ω 0.5 W bleed resistor** across the
+  isolated output (≈18 mA, ≈10 % of a 1 W part) and a **5.1 V 0.5 W zener** as
+  a clamp. Two cheap through-hole parts; check the specific converter's
+  minimum-load line before settling the value.
 - **Isolation is mandatory.** The rheostat sits across the pump's SELV sensor
   input. Tying an earthed ESP32 ground to X26 risks a ground loop through the
   measurement or worse. €8 of parts.

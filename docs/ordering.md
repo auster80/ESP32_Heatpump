@@ -198,3 +198,36 @@ Add for the install: 3 × 6N137 · B0505S-1W · enclosure and terminal blocks.
 One note on firmware: neither the AD5272 nor the MCP41100 has a ready-made
 ESPHome component, so the tap write is a small custom piece either way. SPI is
 the easier of the two to drive from a lambda.
+
+
+## The isolated converter needs a minimum load
+
+Worth knowing before ordering, because it adds two parts and is independent of
+which converter you buy.
+
+The rheostat section draws almost nothing — a milliamp or two. Unregulated SIP
+converters specify load regulation only down to roughly **10 % of rated load**;
+below that the output climbs well above nominal. On a 1 W part that threshold is
+about 20 mA, and we are two orders of magnitude under it. A 5 V rail sitting at
+6 V would put the MCP41100 past its 5.5 V supply maximum.
+
+Fit a **270 Ω 0.5 W** bleed resistor across the isolated output (≈18 mA, ≈90 mW)
+and a **5.1 V 0.5 W zener** as a clamp. Confirm the value against the specific
+converter's minimum-load line.
+
+## What the isolation barrier actually has to hold
+
+**1 kV is enough. Do not open a third shop for a 1.5 kV part.**
+
+Both sides of the barrier are already SELV — the ESP32 side behind the Class II
+supply's mains isolation, the pump side behind the WPM's own. The barrier here
+is **functional**: it breaks a ground loop and keeps ESP32 switching current out
+of the measurement reference (§3.7). It is not protective separation and must
+not be relied on as such; if mains ever reaches the WPM's SELV rail, that unit's
+own safety isolation has already failed and this converter is not the thing
+standing between you and it.
+
+One consequence to be aware of rather than fix: 6N137 optocouplers are typically
+2.5 kV, so a 1 kV converter becomes the weakest element and sets the barrier's
+figure. That is fine for functional isolation and would not be if we were making
+a safety claim.
