@@ -284,6 +284,9 @@ Development happens on `main` in
   and the bridge must not drive the same contacts alongside it.
 - `docs/tibber-integrations.md` — which Tibber integrations could carry a
   bridge (Homey, Futurehome, Ngenic) and which cannot (vendor clouds).
+- `docs/sg-ready-and-curve.md` — the live curve settings, a concrete 1 K curve
+  cut, and the finding that the SG Ready DHW control saves ~0 % (its fixed
+  windows land on price peaks) — a software fix worth more than the emulator.
 - `docs/winter-2025-26-findings.md` — **read first**: last winter's data says
   the time-shift prize is €20–30/winter, cycling is already fine, and the house
   runs warm; the emulator is a hobby build, not an investment.
