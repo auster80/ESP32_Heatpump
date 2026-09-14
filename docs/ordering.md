@@ -22,8 +22,8 @@ once connected.
 
 | Qty | Part | Note |
 |---|---|---|
-| 1 | **39.2 Ω 0.1 % 25 ppm** metal film | `R1`, the permanent bias. E96 value nearest 39 Ω |
-| 1 | **90.9 Ω 0.1 % 25 ppm** metal film | `R2`, shorted by `K2`. E96 nearest 91 Ω |
+| 1 | **39 Ω metal film, 1 %, ≤100 ppm/K** | `R1`, the permanent bias. Anything 36–47 Ω is fine — see below |
+| 1 | **91 Ω metal film, 1 %, ≤100 ppm/K** | `R2`, shorted by `K2`. Anything 82–100 Ω is fine |
 | 2 | 2N7000 small-signal MOSFET | relay drivers |
 | 2 | 1N4148 diode | flyback across each relay coil |
 | 2 | 1 kΩ, 2 × 10 kΩ resistors | gate drive and I²C pull-ups |
@@ -32,9 +32,50 @@ once connected.
 | 1 | 5 V 1 A supply | Class II / double-insulated, floating output (§3.5) |
 | — | Enclosure, DIN terminal blocks, hookup wire | |
 
-`R1` and `R2` in series give 130.1 Ω, which is the KTY setting; `K2` shorting
-`R2` leaves 39.2 Ω for PT 1000. Exact values do not matter much — the
-calibration in §3.6 fits what is actually fitted.
+`R1` and `R2` in series give ~130 Ω, the KTY setting; `K2` shorting `R2` leaves
+~39 Ω for PT 1000.
+
+## Nothing here needs a precision resistor
+
+An earlier draft of this list demanded 39.2 Ω and 90.9 Ω at **0.1 %**, which is
+an E96 value in a tolerance that is genuinely hard to source in Europe as an
+axial through-hole part. That requirement was wrong and has been removed. It
+made the whole order hinge on one line item for no benefit.
+
+The bias resistor's absolute value is **fitted, not trusted**: `fit_shunt()`
+recovers it from readings of the pump's own outdoor register (§3.6). So its
+tolerance is irrelevant — what the part *is* matters, not what the label says.
+Measured against the model:
+
+| Part actually fitted | Fit recovers | RMS | Sensor identified |
+|---|---|---|---|
+| 39.2 Ω (0.1 %) | 38.3 Ω | 0.088 K | pt1000, 7× margin |
+| 39 Ω E24 (1 %) | 37.9 Ω | 0.089 K | pt1000, 6× margin |
+| 43 Ω (10 % high) | 42.0 Ω | 0.076 K | pt1000, 9× margin |
+| 47 Ω (20 % high) | 45.7 Ω | 0.122 K | pt1000, 5× margin |
+
+A part 20 % away from nominal still works. What would *not* work is assuming a
+nominal value and skipping the calibration: on a 43 Ω part, predicting unseen
+points from the fitted model is accurate to **0.156 K**, against **0.96 K** if
+you assume 39.2 Ω. Fitting is what buys the accuracy; tolerance never did.
+
+**Drift is the only resistor property that matters here**, and 39 Ω is small
+enough that it barely matters either. Over a 20 K swing inside the box:
+
+| Grade | Drift | As sensor error |
+|---|---|---|
+| 0.1 %, 25 ppm/K | 0.020 Ω | 0.005 K |
+| 1 %, 50 ppm/K | 0.039 Ω | 0.010 K |
+| 1 %, 100 ppm/K | 0.078 Ω | 0.020 K |
+| carbon film, 250 ppm/K | 0.195 Ω | 0.051 K |
+
+Ordinary 1 % metal film is typically 50–100 ppm/K and costs nothing. Specify
+that and buy it anywhere.
+
+This is a property of the topology, not a lucky escape: §3.2 puts the
+imprecise parts in a high-impedance parallel leg and calibrates the rest
+against the pump. The same argument already excused the rheostat's ±1 % (and
+the ±20 % of the DIP alternative). It excuses the bias resistors too.
 
 Roughly €55 plus the enclosure.
 
@@ -135,7 +176,7 @@ for the install.
 
 A useful bench rig is small:
 
-- a **1 kΩ 0.1 % resistor** standing in for the AFS 2 (a 10-turn trimmer or a
+- a **1 kΩ resistor** standing in for the AFS 2 (tolerance irrelevant, just measure it) (a 10-turn trimmer or a
   decade box is better — it lets you sweep "weather")
 - a meter across the nodes that will become `X2 T(A)` and `X26`
 - compare what it reads against `ShuntEmulator.presented_ohms()` for the tap
@@ -148,8 +189,8 @@ connected to `X2`.
 ## Breadboard shopping list
 
 ESP32-PICO-KIT · MCP41100-I/P · 2 × Omron G5V-2-DC5 · NE555 (DIP-8) ·
-2 × 2N7000 · 2 × 1N4148 · 39.2 Ω and 90.9 Ω 0.1 % · 1 kΩ 0.1 % (sensor
-stand-in) · 1 kΩ + 2 × 10 kΩ · 1000 µF 16 V · 5 × 100 nF · 5 V 1 A supply ·
+2 × 2N7000 · 2 × 1N4148 · 39 Ω and 91 Ω 1 % metal film · 1 kΩ 1 % (sensor
+stand-in, measure it) · 1 kΩ + 2 × 10 kΩ · 1000 µF 16 V · 5 × 100 nF · 5 V 1 A supply ·
 breadboard and jumpers.
 
 Add for the install: 3 × 6N137 · B0505S-1W · enclosure and terminal blocks.
