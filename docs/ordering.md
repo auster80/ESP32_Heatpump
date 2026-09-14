@@ -168,6 +168,30 @@ rather than worse. With a part 18 % high and the scale measured and fixed, five
 observations gave a **27.7× margin** at **0.022 K rms** — against 10.4× and
 0.048 K when both parameters were fitted.
 
+## USB powers the bench build
+
+No external supply is needed until the box leaves the desk. Budget at 5 V:
+
+| Draw | Steady | Wi-Fi TX peak |
+|---|---|---|
+| ESP32-PICO-KIT-1 | ~120 mA | ~300 mA |
+| 2 × G5V-2 coils, both energised | ~70 mA | ~70 mA |
+| NE555 + MCP41100 | ~10 mA | ~10 mA |
+| **Total** | **~200 mA** | **~380 mA** |
+
+Inside USB 2.0's 500 mA, with margin. Four conditions:
+
+1. **Drive the relay coils from the board's 5 V pin, not 3.3 V.** They are 5 V
+   coils, and 70 mA through the onboard LDO would be wrong twice over.
+2. **Fit the 1000 µF bulk capacitor on the bench too.** The Wi-Fi peak against a
+   thin cable's resistance is exactly the droop that resets the ESP32 and makes
+   K1 chatter (§3.5). Use a short, decent cable.
+3. **Check the board's connector** before buying a cable — Espressif devkits of
+   this generation are often micro-USB rather than USB-C.
+4. The earthed-laptop-USB hazard in §3.5 does **not** apply on the bench: with
+   no pump connected there is no second ground domain to loop with. It starts
+   mattering the moment anything is wired to X2.
+
 ## Skip the isolation while you are on the bench
 
 The optocouplers and the B0505S only matter once the box is wired to the WPM.
