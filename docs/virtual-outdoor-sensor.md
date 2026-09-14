@@ -139,7 +139,7 @@ with register 506 quantised to 0.1 °C.
 |---|---|---|
 | 1 | **ESP32** dev board (ESPHome) | control, Wi-Fi/MQTT |
 | 2 | **AD5272BRMZ-100** — 100 kΩ, 1024-tap I²C digital rheostat | the shunt. ±1 % end-to-end, ~35 Ω wiper, 5.5 V max across terminals |
-| 3 | **39 Ω + 91 Ω, 0.1 % 25 ppm** | series bias. `K2` shorts the 91 Ω: 39 Ω for PT 1000, 130 Ω for KTY (§3.6) |
+| 3 | **39 Ω + 91 Ω metal film, 1 %, ≤100 ppm/K** | series bias. `K2` shorts the 91 Ω: ~39 Ω for PT 1000, ~130 Ω for KTY (§3.6). Values are fitted, so tolerance is irrelevant; only drift matters, and at these resistances it is 0.02 K |
 | 4 | **ISO1540** I²C isolator + **B0505S-1W** isolated DC/DC | floats the rheostat section at the pump's X26 potential. Not optional |
 | 5 | **DPDT signal relay** (Omron G6K-2P) ×2 + drivers + flyback diodes | `K1` the bypass (NC = real sensor); `K2` the bias select, latching preferred |
 | 6 | **TPL5010** (or NE555 monostable) | hardware watchdog holding K1 in only while the ESP32 heartbeats |
@@ -236,7 +236,7 @@ So the same AD5272-100 serves both. Only the series bias differs, because it
 has to buy the same *kelvin* of warm range out of a sensor with 3.7× the
 resistance slope: **38 Ω for PT 1000, 129 Ω for KTY**.
 
-**Make the bias switchable.** `R1` = 39 Ω 0.1 % permanently in circuit, `R2` =
+**Make the bias switchable.** `R1` = 39 Ω permanently in circuit, `R2` =
 91 Ω 0.1 % in series with it, shorted by a second signal relay `K2`. K2 open
 gives 130 Ω (KTY), K2 shorting gives 39 Ω (PT 1000). Prefer a latching relay:
 no standing coil current, and the setting survives a reset. One relay and one
