@@ -94,13 +94,15 @@ InfluxDB is configured with no include/exclude filter, so every entity HA sees
 is in it, including the Tecalor sensors, the SG Ready state, room temperature
 and the price percentile. Each question below decides something specific.
 
-1. **Does the heating curve see raw or damped outdoor temperature?**
-   Cross-correlate the ISG's reported outdoor temperature against an
-   independent weather series and measure the lag. *Decides whether this
-   project is viable at all.* A lag of minutes is fine; 24 h+ kills it.
-2. **Is the compressor on/off or modulating?** The run-length distribution
-   answers it instantly — bimodal fixed runs versus long variable ones.
-   *Decides whether `CyclingModel` is the right model.*
+1. ~~Does the heating curve see raw or damped outdoor temperature?~~
+   **Answered: raw.** `GEBÄUDEDÄMPFUNG` damps only the summer-switching
+   decision, as the manual's placement suggested. The curve responds to the
+   presented temperature directly, so intraday shifting works and the project
+   is viable. The summer-trip guard in §5 still applies, because *that*
+   decision is damped.
+2. ~~Is the compressor on/off or modulating?~~ **Answered: on/off only.**
+   `CyclingModel` is therefore the right model rather than an approximation,
+   and the starts/hour formula applies directly.
 3. **How bad is cycling today, and where does it peak?** Starts per day against
    outdoor temperature, and the run-length histogram. *Gives `buffer_kwh` and
    `capacity_kw` by fitting the curve above, and sets the baseline to beat.*
