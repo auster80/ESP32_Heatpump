@@ -112,6 +112,56 @@ cheap hours because they lie outside both bands — and the evening raises at
 18–21 fall outside *both* windows entirely, so they are draw-triggered top-ups
 issued at whatever moment the logic noticed, with no price test at all.
 
+### What actually triggers the expensive heating
+
+Classifying every setpoint raise by the tank temperature in the 20 minutes
+before it — low means a draw emptied it, warm means the tank did not need it:
+
+| Expensive-third raises (19) | Count | |
+|---|---|---|
+| **DEMAND — tank at/below 43 °C** | **9 (47 %)** | evening draws, exactly as theorised |
+| **OPPORTUNISTIC — tank still 50–55 °C** | **7 (37 %)** | pure waste |
+| marginal (43–50 °C) | 3 (16 %) | |
+
+Mean tank minimum before an expensive raise is 44.5 °C, against 49.5 °C before a
+cheap one — the expensive ones really are being forced by depletion.
+
+**The evening-shower theory is right**, and the draws are large:
+
+| Evening draws (17:00–22:00), 11 events | |
+|---|---|
+| Mean start → end | **49.8 °C → 38.7 °C** |
+| Mean drop | **11.1 K** |
+| p90 drop | 15.8 K |
+| Worst observed | **18.6 K** |
+
+The critical number is the *start*: the tank enters the evening at **49.8 °C on
+average, not 55 °C**. It has already drifted down during the day and was never
+topped up in the cheap afternoon, so the evening draw lands on a half-full tank
+and punches straight through the 40 °C floor — forcing a top-up at the 0.39
+€/kWh peak.
+
+### Could it be avoided? Yes — entirely
+
+Replaying all 11 evening draws against different starting temperatures. This is
+measured in kelvin, so it does not depend on any assumption about tank volume:
+
+| Fill the tank to… | Evening draws that still hit the 40 °C floor |
+|---|---|
+| 55 °C | 3 of 11 (27 %) |
+| 58 °C | 1 of 11 (9 %) |
+| **60 °C** | **0 of 11 (0 %)** |
+
+Covering the worst observed draw (18.6 K) needs a start of **58.6 °C**. So
+**filling to 60 °C in the cheap window before the evening eliminates every
+demand-driven peak-hour trigger observed.**
+
+Two caveats. 60 °C is the top of register 1509's range, leaving only 1.4 K of
+margin over the worst draw seen — a longer-than-usual shower run would still
+breach it, and there is no headroom left above. And the *opportunistic* 37 % are
+not fixed by this at all; they need the price test, since the tank was already
+warm when those raises fired.
+
 ### The fix — pure software, four changes
 
 1. **Drop the fixed search bands.** Search the whole horizon from now to the
