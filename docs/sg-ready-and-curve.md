@@ -46,49 +46,71 @@ the daily price *peak* (~0.39 €/kWh); the cheapest hours (09–13, ~0.19, midd
 solar) are barely used. Water temperature is fine — median 53 °C — so comfort is
 not the constraint; the timing is simply price-blind.
 
-### Why — three causes, none of them the safety windows
+### Live DHW configuration (Modbus, 2026-09-14)
 
-The 05:00 and 16:00 checks are a *safety net* (guarantee hot water for the
-morning and evening draw), and the data clears them completely:
+| Register | Parameter | Value |
+|---|---|---|
+| 1509 | DHW **Komfort** setpoint | **55.0 °C** |
+| 1510 | DHW **ECO** setpoint | **40.0 °C** |
+| 4000 | SG Ready enabled | **1 (on)** |
+| 5000 | SG Ready operating state | 2 (Normal) |
+| 522 | **active** DHW setpoint right now | **40.0 °C** (ECO) |
+| 521 | tank actual | 54.4 °C |
+
+The active setpoint tracks the SG Ready state, and the logged history over
+Aug–Sep shows all four levels in use:
+
+| Active setpoint | Meaning | Share of time |
+|---|---|---|
+| 10.0 °C | SG Ready **Blocked** (1) | 10.2 % |
+| **40.0 °C** | **ECO — the resting floor** | **71.4 %** |
+| 55.0 °C | Comfort (3) — commanded heat | 17.7 % |
+| 60.0 °C | Ordered (4) | 0.7 % |
+
+### Why — and a correction
+
+The 05:00 and 16:00 checks are a *safety net*, and the data clears them:
 
 | Check | Mean tank temperature | Days below the 46 °C threshold |
 |---|---|---|
 | 05:00 | 55.0 °C | **0 of 17** |
 | 16:00 | 53.8 °C | **0 of 15** |
 
-**The safety override never fires.** It is not the problem, and the 46 °C
-threshold is not what is costing money.
+**The safety override never fires.** Neither it nor its 46 °C threshold costs
+anything.
 
-The measured tank tells the real story:
+Measured tank behaviour: **standing loss is 0.15 K/h**, so from 55 °C the tank
+needs **~61 hours** to fall to 46 °C. It is emptied by draws, not by time.
 
-- **Standing loss is 0.15 K/h.** From 55 °C the tank needs **~61 hours** to fall
-  to 46 °C. Heat costs essentially nothing to store, so the tank is a far better
-  battery than the control treats it as.
-- The tank is only emptied by **draws**, not by time. Daily minimum averages
-  ~36 °C — showers — and the system then reheats *immediately*.
+**Correction to an earlier draft of this file.** It claimed the controller
+"boosts but never blocks", letting the WPM free-run its own hysteresis. The
+register history shows that is wrong on both counts: the system *does* block
+(10.2 % of the time at the 10 °C setpoint), and the **ECO floor of 40 °C is
+itself an effective block** — with the tank at 54 °C and the active setpoint at
+40 °C, the pump has no reason to run at all. The WPM is passive most of the
+time, exactly as intended.
 
-So the three actual causes:
+The real fault is narrower and clearer: **the Comfort raises — which are the
+actual heat commands — are timed badly.**
 
-1. **The search bands are hard-coded to a winter price shape.** The morning
-   window searches 18:00→06:30 and the evening window 12:00→18:00. In August the
-   cheapest hours are **09:00–13:00** (0.184–0.217 €/kWh, midday solar) and the
-   overnight band the "morning" window is confined to costs **0.31**. The
-   controller cannot reach the cheap hours because they lie outside both bands.
-2. **It boosts but never blocks.** `Comfort` was asserted 40 % of the time while
-   the blocking contact was on only 21 %. Outside a window the logic sets
-   `targetState = null` — "no DHW action needed" — and leaves the relays where
-   they were. With SG Ready at Normal or Comfort, the WPM runs its *own* DHW
-   hysteresis and reheats the moment a draw drops the tank, whatever the price.
-   That is why heating lands at 19:02 in the 0.39 €/kWh evening peak.
-3. **Reheat is immediate, not deadline-aware.** With 61 hours of standing loss
-   there is no reason to refill at 19:00 for a draw at 07:00 the next morning.
+| Setpoint raises (ECO→Comfort), Aug–Sep | 55 events |
+|---|---|
+| Average price percentile at the raise | **58** (biased expensive) |
+| In the cheap third | 15 |
+| In the middle third | 14 |
+| **In the expensive third** | **26 (47 %)** |
 
-**Original root-cause note, from the Node-RED flow** (`existing-home-assistant-control.md`):
-the DHW logic has fixed safety overrides at **05:00 and 16:00** and heats within
-human "morning" and "evening" windows. Those clock times sit near the daily
-price peaks — 05:00 averaged 0.343, 16:00 averaged 0.341, both well above the
-0.19 midday trough. The control is time-scheduled dressed as price-aware, and
-the chosen times are close to the worst of the day.
+Hour-of-day of those raises clusters at 00–01 (13), 10–11 (13) and **18–21
+(17)** — the last being the daily price peak at ~0.39 €/kWh. Nearly half the
+heat commands land in the most expensive third of the day.
+
+The cause is the hard-coded search bands: the morning window searches
+18:00→06:30 and the evening window 12:00→18:00. In August the cheapest hours are
+**09:00–13:00** (0.184–0.217 €/kWh, midday solar) while the overnight band the
+"morning" window is confined to costs **0.31**. The controller cannot reach the
+cheap hours because they lie outside both bands — and the evening raises at
+18–21 fall outside *both* windows entirely, so they are draw-triggered top-ups
+issued at whatever moment the logic noticed, with no price test at all.
 
 ### The fix — pure software, four changes
 
@@ -97,18 +119,24 @@ the chosen times are close to the worst of the day.
    18:00–06:30 and evening to 12:00–18:00. This alone reaches the midday trough
    in summer and keeps the overnight trough in winter, with no seasonal
    switching.
-2. **Block during the expensive tercile.** This is the biggest lever and it is
-   currently missing entirely. Assert SG Ready state 1 whenever price is in the
-   top third *and* the tank is above a floor. At 0.15 K/h a six-hour block costs
-   **under 1 K** of tank temperature, so it is nearly free.
+2. **Price-test every raise.** 47 % of heat commands currently fire in the
+   expensive third. No raise should be issued above, say, the 40th percentile
+   unless the tank is genuinely near the floor. This is the single biggest
+   lever — blocking is already partly in place (10 % of the time), so the win is
+   in *not commanding heat at the wrong moment*, rather than in adding blocks.
 3. **Make reheat deadline-aware.** After a draw, do not reheat immediately
    unless the tank is below the floor. Wait for the cheapest hour before the
    next expected draw.
-4. **Set the floor from draws, not from standing loss.** The 46 °C check never
-   fires and could be lowered, but that is not where the win is — the binding
-   constraint is having enough hot water at 07:00 and 18:00, not the tank
-   cooling. Keep a genuine legionella cycle, and set the floor by how much
-   drawable water a shower needs.
+4. **Raise the Comfort fill target, keep the ECO floor low.** This is the
+   setpoint optimisation. The ECO floor of 40 °C is doing its job and should
+   stay low — it is what keeps the pump passive. But filling only to **55 °C**
+   wastes the tank's capacity. Going to **60 °C** (register 1509: 550 → 600)
+   widens the usable band from 15 K to 20 K, **a third more energy stored per
+   cheap cycle**, and at 0.15 K/h that buys roughly 33 extra hours of coast.
+   Fewer fills are then needed, and every one of them can be placed in a cheap
+   hour. Check the mixing valve is set correctly first — 60 °C at the tap
+   scalds — and note COP falls slightly at the higher lift, which the wider
+   price spread more than pays for.
 
 On 650 kWh/winter at ~0.30 €/kWh, DHW costs about **€195/winter**. Moving the
 mean paid price from 0.302 toward ~0.22 — conservative against the 0.191
