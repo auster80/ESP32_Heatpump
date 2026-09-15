@@ -140,3 +140,51 @@ three units.
 phase, run as Victron ESS with dynamic pricing.** Buy it for 2027, not for
 2026. Do not buy a third module at today's prices; the ESS is modular, so add
 one later only if winter spreads widen the way spring 2026 did.
+
+## Correction: at real shop prices the knee moves to three modules
+
+The table above priced a US5000 at €1 450, the typical 2026 retail figure. An
+actual cart (Sep 2026) shows **€706,86 per module** plus €37 bracket and a €15
+cable set — roughly half. Rerun at that price:
+
+| Size | Cost (€707 inc VAT) | Saving/yr | Payback | Net at 10 y | Marginal module |
+|---|---|---|---|---|---|
+| 4.8 kWh | 3 549 € | 327 € | 10.8 y | −277 € | 2.3 y |
+| 9.6 kWh | 4 293 € | 523 € | 8.2 y | +939 € | 3.8 y |
+| **14.4 kWh** | **5 037 €** | **645 €** | **7.8 y** | **+1 411 €** | **6.1 y** |
+| 19.2 kWh | 5 781 € | 706 € | 8.2 y | +1 275 € | 12.2 y |
+
+At €707 the **third module pays back in 6.1 years** and lifts the ten-year net
+to its maximum; the fourth still does not. **14.4 kWh (3 × US5000) is the size
+at this price.** If the cart price turns out to be ex-VAT (€855 inc), the third
+module pays back in 7.3 years and 14.4 kWh remains the best size, just with
+thinner margins.
+
+With the 21 % VAT reclaimed on the whole system as well (see below), 14.4 kWh
+pays back in **6.5 years** and clears **+2 285 €** at ten years. The battery
+moves from "defensible" to "clearly worthwhile".
+
+## BTW: 21 % applies, but it can be reclaimed — with a catch
+
+Batteries do **not** get the 0 % rate that solar panels have had since 2023;
+they carry 21 %. A private person cannot buy one VAT-free. What *is* possible is
+to **reclaim** the 21 % afterwards, because the Belastingdienst treats someone
+who buys and sells electricity through a battery on a dynamic contract as a
+VAT entrepreneur. Five cumulative conditions:
+
+1. The battery is used to buy and sell electricity through your supplier.
+2. It has an energy-management system (Victron ESS with dynamic pricing counts).
+3. You have a **dynamic energy contract** (Tibber qualifies; it can be arranged
+   up to a month after the invoice date).
+4. Invoice and energy contract are in your name.
+5. **You are not in the KOR** (kleineondernemersregeling) at purchase and
+   installation.
+
+Condition 5 is the catch for this house. Most solar owners are in the KOR —
+many were placed there after the 2023 panel changes — and **inside the KOR no
+VAT can be reclaimed**. Leaving it takes effect from the first day of a
+calendar quarter with about four weeks' processing, so it must be done *before*
+the invoice, not after. Leaving the KOR also means filing VAT returns and owing
+VAT on the electricity you sell, which is why the reclaim is usually netted
+against that and the whole thing is worth a tax adviser's half hour before the
+order goes in.
