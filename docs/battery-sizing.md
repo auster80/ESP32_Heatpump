@@ -234,3 +234,28 @@ this: that the €500 de-minimis applies to your re-entry case as read here, and
 whether a private-use correction (privégebruik) is applied to a household
 battery in the years you are registered. Both are minor against the €950, but
 this is tax, not engineering.
+
+## Buying in Germany: 0 % VAT exists there — whether it reaches you depends on the sale
+
+Germany has applied a **0 % VAT rate (Nullsteuersatz, § 12 Abs. 3 UStG) to
+home batteries and PV components since 1 Jan 2023**, for systems on or near
+residential buildings. Whether a Dutch buyer benefits depends entirely on how
+the goods change hands:
+
+| How | VAT you pay | Why |
+|---|---|---|
+| **Shipped to the Netherlands** | **21 % Dutch VAT** | B2C distance sale: since July 2021 the seller must charge the *destination* country's VAT (OSS). The German 0 % does not travel. |
+| **Collected in person in Germany** | **0 % — plausibly** | The supply is then domestic German; the German rate applies. A private buyer who takes goods home pays VAT where bought and owes no Dutch acquisition VAT. |
+
+The collection route is legal for a private individual, but has one practical
+uncertainty: the 0 % rate is conditioned on installation on/near a residential
+building, and the BMF guidance does not spell out whether that building may be
+abroad. Some German shops apply 0 % to any collector who confirms residential
+use; others require a German installation address. **Ask the shop before
+driving.**
+
+If it works, it dominates the Dutch route: the same ~€707 net per module, but
+with **no KOR exit, no two years of VAT returns, and no revision exposure** —
+and the MultiPlus and Cerbo qualify for 0 % as system components if bought
+together. Against that: a ~3 h drive for ~120 kg of batteries, and warranty
+service across a border.
