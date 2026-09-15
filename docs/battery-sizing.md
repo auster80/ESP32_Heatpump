@@ -259,3 +259,21 @@ with **no KOR exit, no two years of VAT returns, and no revision exposure** —
 and the MultiPlus and Cerbo qualify for 0 % as system components if bought
 together. Against that: a ~3 h drive for ~120 kg of batteries, and warranty
 service across a border.
+
+### The MultiPlus qualifies for the German 0 % too — with the same catch
+
+A MultiPlus-II is a *battery* inverter/charger rather than a PV inverter, but
+under § 12 Abs. 3 UStG it counts as an **essential component of a storage
+system**, and retrofitting storage to an existing PV installation is expressly
+covered. German shops list the MultiPlus-II 48/5000 at 0 % on that basis, so
+the whole kit — modules, MultiPlus, Cerbo GX — can in principle be bought at 0 %
+together, which is cleaner than buying the batteries at 0 % and the inverter at
+21 %.
+
+The catch is the same one as for the batteries, only more visible: several
+German shops state the 0 % offer is **"exclusively for private end consumers in
+Germany"**. That is shop policy, not the law — the statute conditions the rate
+on residential installation, not on a German address — but it means a Dutch
+collector has to find a shop willing to apply it. Ask explicitly, for the full
+kit, before making the trip. If a shop will do the batteries at 0 % it will
+almost always do the MultiPlus on the same declaration.
