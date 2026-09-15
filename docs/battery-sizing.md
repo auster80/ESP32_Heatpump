@@ -422,10 +422,20 @@ three in one trip.
 
 1. **Mijn Belastingdienst Zakelijk** (mijnzakelijk.belastingdienst.nl) — log in
    with **DigiD** (a private person registered as VAT entrepreneur for solar
-   panels uses DigiD, not eHerkenning). Under *Omzetbelasting* it shows whether
-   you are a KOR participant and since when. Deregistration is done in the
-   same place — the online *afmeldformulier*; **paper forms are no longer
-   accepted**.
+   panels uses DigiD, not eHerkenning). The section is labelled **'Btw'**
+   (not 'Omzetbelasting'); under it, *'Btw-identificatienummer'* shows your
+   registration and *'Kleineondernemersregeling (KOR) in Nederland'* shows
+   whether you participate and holds the online *afmeldformulier*; **paper
+   forms are no longer accepted**.
+
+   **If there is no 'Btw' section at all**, you have no active btw-registration:
+   the Belastingdienst has ended your entrepreneur status, so you are *not* in
+   the KOR and there is nothing to leave. For the Dutch reclaim route you would
+   then register afresh as a btw-ondernemer — and a new registration starts
+   **outside** the KOR unless you opt in, so the reclaim needs no
+   deregistration at all. Check first that you are on
+   **mijnzakelijk.belastingdienst.nl**, not the private *mijn.belastingdienst.nl*,
+   which never shows Btw.
 2. **The 2020 letter.** Registering in September 2020 produced a *beschikking*
    confirming KOR participation from a start date. If you never filed an
    afmelding since, that letter is still your status.
