@@ -444,3 +444,58 @@ three in one trip.
    KOR; if you are still receiving filing requests, you are not.
 4. **Belastingtelefoon 0800-0543**, with your BSN / btw-id to hand, will
    confirm it in a minute.
+
+### What the 2020 letters actually say
+
+Two Belastingdienst documents settle the status question without the portal:
+
+- **23–30 Sep 2020 — "Aangifte omzetbelasting, startende ondernemers."** The
+  one-off startup VAT return for the panel refund, filed by post, refund
+  claimed. This is the *registration* as btw-ondernemer — not the KOR.
+- **9 Dec 2020 — "Uw deelname aan de kleineondernemersregeling als
+  zonnepaneelhouder."** The KOR *beschikking*. It confirms registration as
+  btw-ondernemer under number ending **…B01**, and that KOR participation
+  **took effect 1 January 2021** — not September 2020 as remembered. It states
+  in terms that after the refund return *"sturen wij u daarna geen
+  btw-aangiften meer"* (no further returns will be sent), which is exactly the
+  "no filing requests = in the KOR" tell, and it points to
+  belastingdienst.nl/kor for how to afmelden if circumstances change.
+
+So: **you are in the KOR, since 1 Jan 2021, with a live btw-number.** The
+one-year difference in start date changes nothing — the 3-year minimum was
+abolished regardless — but the letter is the authoritative record. If the
+portal shows no 'Btw' section it is a portal/label problem, not a missing
+registration.
+
+### Buying from Germany with your btw-number: no — and while in the KOR it would backfire
+
+A VAT-registered business in one EU state can buy from another at 0 % as an
+**intra-Community supply** (the seller zero-rates; the buyer self-assesses
+"acquisition VAT" at home and deducts it again). Whether that helps you
+depends entirely on your KOR status:
+
+| | While in the KOR | After leaving the KOR |
+|---|---|---|
+| May you give the seller your btw-id? | **Not below €10 000/yr of EU purchases** — only after a threshold notification or opting in | Yes |
+| If the seller zero-rates | You owe **21 % Dutch acquisition VAT** and, as a KOR participant, **cannot deduct it** | You declare 21 % and deduct 21 % → **net zero** |
+| Net outcome | **Worse** than paying 0 % at collection under § 12(3) | Same net as the Dutch reclaim route |
+
+So in your current position the btw-number is not a route to VAT-free goods —
+using it would leave you paying 21 % Dutch VAT with no way to recover it. The
+only VAT-free route available *today* is the German **§ 12(3) 0 % rate on
+collection**, which needs no btw status at all.
+
+After leaving the KOR the intra-Community route does work, and it has one
+genuine advantage over § 12(3): it applies to **shipped** goods too, and does
+not depend on a German shop being willing to extend its consumer 0 % to a
+foreigner. But it needs the seller to zero-rate a B2B **collection**, which is
+the case they are most wary of: VIES check of your number, a copy of your ID,
+and a **Gelangensbestätigung** you sign *after* the goods have arrived in the
+Netherlands confirming when transport ended. Many small shops decline this. It
+ends up equivalent to the Dutch reclaim route in money, with more paperwork
+and a seller who may say no.
+
+**Decision rule unchanged:** phone Solarscouts about § 12(3) on collection. If
+yes, buy at 0 % and leave the KOR alone. Only if no, weigh leaving the KOR —
+and then either reclaim in the Netherlands or ask the German seller for a
+B2B intra-Community sale, whichever they will actually do.
