@@ -382,3 +382,38 @@ Meter + interface ~€250 · Lynx + 4 MEGA fuses ~€230 · DC cable, lugs, isol
 ~€150 · MK3-USB ~€60 · MCB, AC cable, glands ~€60 → **~€750**, before
 installation labour. This is what the ~€1 200 "install" allowance in the payback
 tables covers, with margin.
+
+## Staging it: two modules now, a third later
+
+**Technically fine.** Pylontech supports expanding a bank with a matching
+module; the BMS compensates for the small capacity difference between a fresh
+module and two with ~500 cycles, so the older ones do not cap the new one. The
+problems people report are from mixing *different* models (US5000 with
+US2000C), not from adding a matching US5000. Three practical rules:
+
+1. **Match firmware** — bring the two older modules up to the new one's
+   firmware if they differ (Pylontech's Batteryview tool, RS232 cable).
+2. **Let it balance before connecting the inverter** — leave the three
+   modules powered but isolated until the SoC LEDs agree.
+3. **Keep it the same model** — US5000 / US5000-1C are one family; do not
+   add a UP5000, Force or US3000C to the stack.
+
+With a **Lynx Distributor** fitted from the start, adding the third module is a
+10-minute job: one more fused position, one more equal-length cable.
+
+**Two modules on the 48/4k5 GX is fine.** Victron's minimum for this class is
+~9.6 kWh, which two US5000 meet exactly; discharge (2 × 100 A) and charge (55 A
+into 200 A capacity) are nowhere near their limits.
+
+**Economics of the deferral.** The third module's marginal saving is ~€122/yr
+under 2027 rules, and the battery earns almost nothing before 1 Jan 2027
+anyway. Buying it in September 2027 instead of now forgoes roughly Jan–Sep
+2027 of that — **~€90** — in exchange for keeping €758 in hand for a year.
+Neutral-to-slightly-negative, so it is a cash-flow decision, not a value one.
+
+**What actually argues for buying all three now:** the German 0 % rate is a
+policy that could be withdrawn; module prices can move either way; a second
+2¾-hour collection trip; and the small chance the model is superseded (a
+successor is normally still stack-compatible, but firmware-matching gets
+harder). None is decisive. If cash is the constraint, stage it; if not, take
+three in one trip.
