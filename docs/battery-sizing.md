@@ -188,3 +188,21 @@ the invoice, not after. Leaving the KOR also means filing VAT returns and owing
 VAT on the electricity you sell, which is why the reclaim is usually netted
 against that and the whole thing is worth a tax adviser's half hour before the
 order goes in.
+
+## Confirmed: the shop price is ex-VAT
+
+€706,86 is the ex-VAT price, so at checkout a consumer pays **€855,30 per
+module** (+21 %). That makes the two cases exact rather than hypothetical — and
+the ex-VAT figure is precisely what you end up paying *net* if the reclaim
+succeeds, since the reclaim applies to the whole system (inverter, GX,
+installation), not just the modules.
+
+| 14.4 kWh (3 × US5000) | Cost | Payback | Net at 10 y | 3rd module pays back |
+|---|---|---|---|---|
+| Pay VAT, no reclaim (€855/module) | 5 481 € | 8.5 y | +967 € | 7.3 y |
+| **VAT reclaimed** (effectively €707/module) | **4 530 €** | **7.0 y** | **+1 918 €** | **6.1 y** |
+
+Three modules is the right size either way; the fourth pays back in 12–15
+years in both and is not worth it. The reclaim is worth roughly **€950 up front
+and ~1.5 years of payback** — so leaving the KOR before the invoice, if you are
+in it, is the single most valuable administrative step in the whole purchase.
