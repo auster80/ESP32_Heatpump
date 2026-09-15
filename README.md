@@ -284,6 +284,9 @@ Development happens on `main` in
   and the bridge must not drive the same contacts alongside it.
 - `docs/tibber-integrations.md` — which Tibber integrations could carry a
   bridge (Homey, Futurehome, Ngenic) and which cannot (vendor clouds).
+- `docs/battery-sizing.md` — home battery sized on measured load, solar and
+  real prices: 9.6 kWh is the knee, and the case rests on net metering ending
+  in 2027.
 - `docs/recommendations.md` — **start here**: what to change and in what order,
   and why hot water beats the emulator by 3x.
 - `docs/sg-ready-and-curve.md` — the live curve settings, a concrete 1 K curve
