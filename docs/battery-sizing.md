@@ -417,3 +417,20 @@ policy that could be withdrawn; module prices can move either way; a second
 successor is normally still stack-compatible, but firmware-matching gets
 harder). None is decisive. If cash is the constraint, stage it; if not, take
 three in one trip.
+
+### Checking your KOR status
+
+1. **Mijn Belastingdienst Zakelijk** (mijnzakelijk.belastingdienst.nl) — log in
+   with **DigiD** (a private person registered as VAT entrepreneur for solar
+   panels uses DigiD, not eHerkenning). Under *Omzetbelasting* it shows whether
+   you are a KOR participant and since when. Deregistration is done in the
+   same place — the online *afmeldformulier*; **paper forms are no longer
+   accepted**.
+2. **The 2020 letter.** Registering in September 2020 produced a *beschikking*
+   confirming KOR participation from a start date. If you never filed an
+   afmelding since, that letter is still your status.
+3. **The tell.** KOR participants have no VAT-return obligation. If you have
+   not been asked to file quarterly btw-aangiftes since 2020, you are in the
+   KOR; if you are still receiving filing requests, you are not.
+4. **Belastingtelefoon 0800-0543**, with your BSN / btw-id to hand, will
+   confirm it in a minute.
