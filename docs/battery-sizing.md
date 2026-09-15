@@ -277,3 +277,53 @@ on residential installation, not on a German address — but it means a Dutch
 collector has to find a shop willing to apply it. Ask explicitly, for the full
 kit, before making the trip. If a shop will do the batteries at 0 % it will
 almost always do the MultiPlus on the same declaration.
+
+## Where to collect: shops near the Dutch border (checked Sep 2026)
+
+The national German 0 % webshops are all 300–700 km from The Hague (bau-tech in
+Bad Sülze, online-batterien in Hamburg, 1asol in Detmold, Basic Solar in
+Laatzen). Two shops in the border strip carry the kit with collection:
+
+### Solarscouts — Troisdorf (near Cologne) — the one-stop shop
+
+**Belgische Allee 12, 53842 Troisdorf · +49 2241 3276488 · pickup by
+appointment, Mon–Thu 10:00–17:00, Fri 10:00–15:00.** About 2¾ h from The Hague
+via Venlo–Mönchengladbach–Cologne.
+
+| Item | Price, 0 % MwSt | Status |
+|---|---|---|
+| Pylontech US5000 4.8 kWh | **€758** | available now (~4 wk) |
+| Victron MultiPlus-II **48/4k5/55-32 GX** | **€599** | available, 8–11 working days |
+| Cerbo GX MK2 (not needed with the GX unit) | €199.90 | |
+| Brackets (3 ×) + cable set | ~€160 | |
+| **Kit, 3 modules** | **≈ €3 033** | |
+
+Their tax footnote reads *"Bei Bestellungen die unter den neuen Abs. (3) in
+§ 12 UStG fallen"*, and the site has a country selector that includes the
+Netherlands — so they deal with Dutch customers. Whether they apply 0 % to a
+Dutch **collector** is not stated anywhere and has to be asked by phone.
+
+The 48/4k5 GX is the right unit: 4 kW continuous, GX built in (no Cerbo), and
+its smaller 55 A charger (~2.6 kW) costs only **€24/yr** of arbitrage against
+the 70 A unit modelled — while saving ~€365 in hardware.
+
+### GreenAkku (Bosswerk) — Grefrath — closer, inverter only
+
+**Lagerverkauf Bahnstr. 29, 47929 Grefrath · Mon–Fri 10:00–15:30.** About 2 h,
+15 km inside the Venlo crossing. Lists the **MultiPlus-II 48/5000/70-50 at
+€765, 0 %** (ships from 25 Sep 2026), with 0 % handled by a customer
+declaration form. **No new US5000 in stock** (only occasional B-Ware), so it
+cannot supply the batteries.
+
+### The economics of collecting
+
+| 14.4 kWh, ex install €1 200 | All-in | Payback | Net at 10 y |
+|---|---|---|---|
+| Dutch shop, pay VAT | €5 480 | 8.6 y | +€870 |
+| Dutch shop + KOR reclaim | €4 740 | 7.5 y | +€1 610 |
+| **Solarscouts, collect at 0 %** | **€4 233** | **6.9 y** | **+€1 877** |
+
+Cheaper than the reclaim route by ~€500 **and** with no KOR exit, no VAT
+returns, no revision exposure. If winter spreads double, payback drops to
+5.8 y. Ruled out: aachen-power (an IT/solar services firm, no stock, no
+pickup).
