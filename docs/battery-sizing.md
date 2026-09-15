@@ -206,3 +206,31 @@ Three modules is the right size either way; the fourth pays back in 12–15
 years in both and is not worth it. The reclaim is worth roughly **€950 up front
 and ~1.5 years of payback** — so leaving the KOR before the invoice, if you are
 in it, is the single most valuable administrative step in the whole purchase.
+
+## KOR: registered September 2020 — you can leave, and cheaply
+
+Registering for the solar-panel VAT refund in September 2020 put you in the
+(new) KOR, and nothing since — including the 2023 move of panels to 0 % — took
+you out. So you are almost certainly still in it, and inside it the battery
+reclaim is not possible. The good news is that every lock-in that used to make
+leaving painful has expired or been abolished:
+
+| Rule | What it means for you |
+|---|---|
+| Minimum 3 years' participation | **Abolished 1 Jan 2025.** You can leave at any time. |
+| Exit takes effect at a quarter start, notify ≥ 4 weeks ahead | To leave **1 Jan 2027**, file by **~1 Dec 2026**. Invoice the battery from January. |
+| Re-entry ban: rest of that year + the following year | Out of the KOR for **2027 and 2028**; may re-enter 1 Jan 2029. |
+| Battery revision period: 5 years | Re-entering within it *can* claw back reclaimed VAT — **but** |
+| **De minimis: revision under €500/year is not applied** | Your ~€950 reclaim revises at ~€190/year — **below €500, so no clawback** even if you re-enter in 2029. |
+| Panels' 5-year revision (2020 + 4) | **Ended 2024.** Nothing to repay on the panels. |
+
+Net: leaving the KOR costs two years of quarterly VAT returns (mostly small
+amounts — VAT owed on electricity sold, netted against nothing much) and gains
+about **€950**, with no revision exposure on either the battery or the panels.
+Clearly worth it. The timing also fits the recommendation to buy for 2027.
+
+Two things to confirm with the Belastingdienst or an adviser before relying on
+this: that the €500 de-minimis applies to your re-entry case as read here, and
+whether a private-use correction (privégebruik) is applied to a household
+battery in the years you are registered. Both are minor against the €950, but
+this is tax, not engineering.
