@@ -327,3 +327,58 @@ Cheaper than the reclaim route by ~€500 **and** with no KOR exit, no VAT
 returns, no revision exposure. If winter spreads double, payback drops to
 5.8 y. Ruled out: aachen-power (an IT/solar services firm, no stock, no
 pickup).
+
+## Complete bill of materials — single-phase ESS, 3 × US5000, MultiPlus-II 48/4k5 GX
+
+What the shop kit (batteries, inverter, brackets, battery link cables) does
+**not** include. Roughly in order of "most often forgotten".
+
+### Must have
+
+| Item | Why | Notes |
+|---|---|---|
+| **Energy meter: EM540 or VM-3P75CT** (three-phase) | The GX must see *net grid power across all three phases* to control charge/discharge. Dutch billing nets the phases, so the meter must too. | **Not the ET340** — it counts each phase separately and mis-reads a 1-phase ESS on a 3-phase grid. The VM-3P75CT uses CT clamps (no meter-tail rewiring) and talks VE.Can; the EM540 is RS485. |
+| RS485-to-USB cable (ASS030572018) *or* VE.Can cable | To connect the meter to the GX | EM540 → RS485-USB; VM-3P75CT → VE.Can (RJ45). |
+| **Pylontech CAN cable, Type A — ASS030710018** | GX reads the Pylontech BMS (SoC, charge limits via DVCC) | Easy to miss; the wrong type (B) doesn't work. |
+| **DC fuse on the inverter leg: 200 A MEGA** | Victron's manual figure for the 48/5000 class | Sized for inverter peak current, not battery rating. |
+| **DC cable, inverter leg: 70 mm²**, ≤5 m, M8 lugs | Manual figure | Keep it short; 35 mm² is *not* enough for the 4k5's surge. |
+| **DC isolator / battery switch** (275 A class) | Service disconnect, code requirement | |
+| **AC-in MCB in the consumer unit: C32 (single pole + N)** | Dedicated feed for the MultiPlus AC-in | Grid-parallel ESS: AC-in only; AC-out-1 optional for backup loads. |
+| **MK3-USB interface (ASS030140000)** | Needed *once* to set the grid code and load the ESS assistant via VEConfigure | ~€60; borrowable, but you'll want it. |
+| **Earthing**: MultiPlus chassis + Pylontech chassis to PE | Safety, and the RCD-type requirements | |
+
+### Strongly recommended
+
+| Item | Why |
+|---|---|
+| **Lynx Distributor** (1 ×, 4 fused positions) | Three batteries + one inverter = exactly four positions. Each battery gets its own **125 A MEGA** fuse and equal-length cable — Victron's practice for paralleled modules, so the three share current evenly. Also leaves the structure ready for a 4th module. |
+| 3 × battery-to-Lynx cables, **35 mm²**, **equal length** | Each US5000 leg carries ≤100 A (its BMS limit) | |
+
+Minimum alternative to the Lynx: Pylontech's own parallel link cables between
+modules, bank +/− to a single MEGA fuse holder + isolator → inverter. ~€40
+instead of ~€200, but no per-module fusing and no easy 4th-module expansion.
+
+### Not needed
+
+| Item | Why not |
+|---|---|
+| **Lynx Shunt / SmartShunt / BMV** | Pylontech's BMS reports SoC over CAN. A shunt would be redundant. |
+| **Cerbo GX** | Built into the 48/4k5 **GX** unit. Only needed with the plain 48/5000/70-50. |
+| **GX Touch display** | Optional; VRM and the LAN web UI do the same. |
+
+### Not a part, but required
+
+- **Grid code**: set to **Netherlands (NEN-EN 50549-1)** in VEConfigure. The
+  MultiPlus-II is certified for it.
+- **Register the installation** with the netbeheerder at energieleveren.nl.
+  A grid-parallel inverter must be registered, battery or not.
+- **ESS mode**: "Optimized (with BatteryLife)" or "Optimized (without)" plus
+  **Dynamic ESS** on the GX for price-aware control. Venus OS Large also runs
+  Node-RED on the GX itself.
+
+### Budget beyond the shop kit
+
+Meter + interface ~€250 · Lynx + 4 MEGA fuses ~€230 · DC cable, lugs, isolator
+~€150 · MK3-USB ~€60 · MCB, AC cable, glands ~€60 → **~€750**, before
+installation labour. This is what the ~€1 200 "install" allowance in the payback
+tables covers, with margin.
